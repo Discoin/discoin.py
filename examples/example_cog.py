@@ -17,7 +17,7 @@ class Economy(commands.Cog):
     @tasks.loop(minutes=5.0) # A background task that runs every 5 minutes
     async def discoin_update(self):
         await self.bot.wait_until_ready()
-        await asyncio.sleep(1)
+        await asyncio.sleep(1) # Avoids any errors about the bot not fully being ready.
 
         unhandled_transactions = await self.discoin_client.fetch_transactions() # Grabs a list of unhandled transactions from the API
         for transaction in unhandled_transactions:
