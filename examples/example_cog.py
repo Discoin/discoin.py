@@ -5,7 +5,7 @@ from discord.ext import commands, tasks
 from discord.ext.commands import Cog
 from discoin import Discoin
 
-class Economy(commands.Cog):
+class Economy(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.discoin_client = Discoin(token="XXXXXXXXXXXXXXX", me="{YOUR CURRENCY CODE}", loop=bot.loop) # Initializes Discoin
