@@ -1,0 +1,8 @@
+# Ignore Pycache
+__pycache__
+
+# Stupid Mac Files
+.DS_Store
+
+# Ignore Testing Files
+/test.py

@@ -1,0 +1,13 @@
+# Discoin for Python
+
+## Requirements
+* aiohttp
+
+Documentation can be found [here](https://github.com/Dr-Ari-Gami/discoin.py/wiki)
+
+## Credits
+* [Dr_Ari_Gami](https://github.com/Dr-Ari-Gami/) (Main Developer)
+* [DeveloperAnonymous](https://github.com/DeveloperAnonymous) (Collaborator)
+* [Theelgirl](https://github.com/Theelgirl) (Collaborator)
+* [PizzaFox](https://github.com/pizzafox) (Main developer of discoin)
+* [Austin Huang](https://github.com/austinhuang0131) (Owner of discoin)
