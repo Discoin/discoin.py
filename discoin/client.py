@@ -31,7 +31,7 @@ class Discoin():
 
         `code` = 3 letter currency code that you want to search for. `None` will just fetch all results. Default is `me`. (`string`)
         `handled` = Defaults to `False`. Will filter results to see if they are handled or not. `None` will fetch all ('bool')
-        `advanced_filter` = Optionally, you can create your old filter. Not recommended (`string`)
+        `advanced_filter` = Optionally, you can create your own filter. Not recommended (`string`)
         '''
         code = kwargs.pop("code", self._me)
         handled = kwargs.pop("handled", False)

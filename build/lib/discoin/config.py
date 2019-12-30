@@ -1,1 +1,0 @@
-DOMAIN = "https://discoin.zws.im"
