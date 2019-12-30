@@ -54,7 +54,7 @@ class Economy(Cog):
         transaction = transaction[0]
 
         new_transaction = await self.discoin_client.create_transaction(transaction.currency_from.id, transaction.payout, ctx.author.id)
-        '''Remove {transaction.payout} from your user's balance'''
+        '''Add {transaction.payout} from your user's balance'''
         await ctx.send(f"Your refund to {new_transaction.currency_to.name} (`{new_transaction.currency_to.id}`)is on its way! \nYou will be getting `{new_transaction.payout} {new_transaction.currency_to.id}` \n\nHere is your receipt: `{new_transaction.id}`")
 
     @transfer.command()
