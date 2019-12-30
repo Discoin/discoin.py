@@ -38,7 +38,7 @@ class Economy(Cog):
             user = self.bot.get_user(transaction.user_id)
             if user: await user.send(f"Your transfer from {transaction.currency_from.name} (`{transaction.currency_from.id}`) has just been processed! \n`${transaction.payout}` has been added to your account. \nHere is your receipt: `{transaction.id}`") # Notify the user that their transaction went through
 
-    @commands.command()
+    @commands.group()
     async def transfer(self, ctx, amount: float, to: int):
         '''Transfer currency to another bot that supports discoin'''
         to = to.upper() # Make the currency code uppercase
@@ -46,6 +46,24 @@ class Economy(Cog):
         transaction = await self.discoin_client.create_transaction(to, amount, ctx.author.id) # Make the transaction
         '''Remove {amount} from the user's balance'''
         await ctx.send(f"Your transfer to {transaction.currency_to.name} (`{transaction.currency_to.id}`) is on its way! \nYou will be getting `{transaction.payout} {transaction.currency_to.id}` \nHere is your receipt: `{transaction.id}`")
+    
+    @transfer.command()
+    async def reverse(self, ctx, transaction_id):
+        '''Reverse a transaction'''
+        transaction = await self.discoin_client.fetch_transactions(advanced_filter=f"filter=id||eq||{transaction_id}")
+        transaction = transaction[0]
+
+        new_transaction = await self.discoin_client.create_transaction(transaction.currency_from.id, transaction.payout, ctx.author.id)
+        '''Remove {transaction.payout} from your user's balance'''
+        await ctx.send(f"Your refund to {new_transaction.currency_to.name} (`{new_transaction.currency_to.id}`)is on its way! \nYou will be getting `{new_transaction.payout} {new_transaction.currency_to.id}` \n\nHere is your receipt: `{new_transaction.id}`")
+
+    @transfer.command()
+    async def rates(self, ctx):
+        discoin_rates = self.discoin_client.fetch_currencies()
+        msg = ""
+        for rate in discoin_rates:
+            msg += f"{rate.name} (`{rate.id}`) has a value of `{rate.value}`"
+        await ctx.send(msg)
 
 def setup(bot):
     bot.add_cog(Economy(bot))
