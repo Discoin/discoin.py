@@ -21,3 +21,9 @@ class InvalidMethod(DiscoinError):
     This error is raised when the user tries to use an incorrect method with `utils.api_request`
     '''
     pass
+
+class WebTimeoutError(DiscoinError):
+    '''
+    This error is raised when `utils.api_request` times out
+    '''
+    pass

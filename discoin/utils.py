@@ -1,6 +1,7 @@
 from .config import DOMAIN
-from .errors import InternalServerError, BadRequest, InvalidMethod
+from .errors import InternalServerError, BadRequest, InvalidMethod, WebTimeoutError
 from aiohttp import ClientSession
+from asyncio import TimeoutError
 
 async def api_request(session: ClientSession, method: str, url_path: str, headers: dict=None, json: dict=None):
     '''
@@ -13,14 +14,17 @@ async def api_request(session: ClientSession, method: str, url_path: str, header
 
     url = DOMAIN + url_path
 
-    if method.upper() == "GET":
-        api_response = await session.get(url, headers=headers, json=json)
-    elif method.upper() == "POST":
-        api_response = await session.post(url, headers=headers, json=json)
-    elif method.upper() == "PATCH":
-        api_response = await session.patch(url, headers=headers, json=json)
-    else:
-        raise InvalidMethod("Invalid method provided. Must be `GET`, `POST`, or `PATCH`")
+    try:
+        if method.upper() == "GET":
+            api_response = await session.get(url, headers=headers, json=json)
+        elif method.upper() == "POST":
+            api_response = await session.post(url, headers=headers, json=json)
+        elif method.upper() == "PATCH":
+            api_response = await session.patch(url, headers=headers, json=json)
+        else:
+            raise InvalidMethod("Invalid method provided. Must be `GET`, `POST`, or `PATCH`")
+    except TimeoutError:
+        raise WebTimeoutError("Your request has timed out, most likely due to the discoin API being down.")
         
     if api_response.status >= 500: 
         raise InternalServerError(f"The Discoin API returned the status code {api_response.status}")

@@ -29,18 +29,29 @@ class Discoin():
         '''
         Get a list of transactions. It is recommended to run this every 5 minutes in a loop
 
-        `code` = 3 letter currency code that you want to search for. `None` will just fetch all results. Default is `me`. (`string`)
+        `transaction_id` = filter by a transaction id. (`string`)
+        `amount` = filter by the original amount (`int`)
+        `user_id` = filter by the user's id (`int`)
         `handled` = Defaults to `False`. Will filter results to see if they are handled or not. `None` will fetch all ('bool')
+        `payout` = filter by the final amount (`int`)
+        `code` = 3 letter currency code that you want to search for. `None` will just fetch all results. Default is `me`. (`string`)
+        `code_to` = 3 letter currency code that the transaction is going to
         `advanced_filter` = Optionally, you can create your own filter. Not recommended (`string`)
         '''
-        code = kwargs.pop("code", self._me)
+        transaction_id = kwargs.pop("transaction_id", None)
+        amount = kwargs.pop("amount", None)
+        user_id = kwargs.pop("user_id", None)
         handled = kwargs.pop("handled", False)
+        payout = kwargs.pop("payout", None)
+        code = kwargs.pop("code", self._me)
+        code_to = kwargs.pop("code_to", None)
         advanced_filter = kwargs.pop("advanced_filter", None)
 
         if advanced_filter:
             transaction_filter = advanced_filter
         else:
-            transaction_filter = f"""{f"filter=to.id||eq||{code}&" if code else None}{f"filter=handled||eq||{handled}&" if handled != None else None}"""
+            transaction_filter = f"""{f"filter=id||eq||{transaction_id}&" if transaction_id != None else ""}{f"filter=amount||eq||{amount}&" if amount != None else ""}{f"filter=user||eq||{user_id}&" if user_id != None else ""}{f"filter=handled||eq||{str(handled).lower()}&" if handled != None else ""}{f"filter=payout||eq||{payout}&" if payout != None else ""}{f"filter=from.id||eq||{code}&" if code != None else ""}{f"filter=to.id||eq||{code_to}&" if code_to != None else ""}"""
+            print(transaction_filter)
         url_path = f"/transactions?{transaction_filter}"
 
         api_response = await api_request(self._session, "GET", url_path)
