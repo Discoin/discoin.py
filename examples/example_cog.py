@@ -38,7 +38,7 @@ class Economy(Cog):
             user = self.bot.get_user(transaction.user_id)
             if user: await user.send(f"Your transfer from {transaction.currency_from.name} (`{transaction.currency_from.id}`) has just been processed! \n`${transaction.payout}` has been added to your account. \nHere is your receipt: `{transaction.id}`") # Notify the user that their transaction went through
 
-    @commands.group()
+    @commands.group(invoke_without_command=True)
     async def transfer(self, ctx, amount: float, to: int):
         '''Transfer currency to another bot that supports discoin'''
         to = to.upper() # Make the currency code uppercase
