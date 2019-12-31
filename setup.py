@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="discoin",
-    version="3.0.1",
+    version="3.1.3",
     author="Dr_Ari_Gami",
     author_email="drarigami@gmail.com",
     description="Official Discoin Package",
