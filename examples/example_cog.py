@@ -50,7 +50,7 @@ class Economy(Cog):
     @transfer.command()
     async def reverse(self, ctx, transaction_id):
         '''Reverse a transaction'''
-        transaction = await self.discoin_client.fetch_transactions(advanced_filter=f"filter=id||eq||{transaction_id}")
+        transaction = await self.discoin_client.fetch_transactions(transaction_id=transaction_id)
         transaction = transaction[0]
 
         new_transaction = await self.discoin_client.create_transaction(transaction.currency_from.id, transaction.payout, ctx.author.id)
