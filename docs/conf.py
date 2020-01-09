@@ -10,9 +10,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../'))
+# import os
+# import sys
+# sys.path.insert(0, os.path.abspath('.'))
 
 
 # -- Project information -----------------------------------------------------
@@ -37,6 +37,7 @@ extensions = [
 
 autodoc_default_flags = ['members']
 autosummary_generate = True
+autodoc_mock_imports = ['discoin']
 
 # Add any paths that contain templates here, relative to this directory.
 master_doc = 'index'
