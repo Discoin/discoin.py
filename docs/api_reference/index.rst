@@ -3,7 +3,7 @@ API Reference
 #############
 
 .. toctree::
-	getting_started
+    getting_started
     client
     objects
     errors
