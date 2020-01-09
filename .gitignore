@@ -14,7 +14,6 @@ __pycache__
 
 # Ignore Sphinx Files
 /docs_build
-stubs
 
 # Ignore vscode files
 .vscode
