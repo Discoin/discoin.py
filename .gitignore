@@ -11,3 +11,9 @@ __pycache__
 /build
 /dist
 /discoin.egg-info
+
+# Ignore Sphinx Files
+/docs_build
+
+# Ignore vscode files
+.vscode
