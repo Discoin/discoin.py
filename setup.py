@@ -11,7 +11,7 @@ setuptools.setup(
     description="Official Discoin Package",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/Dr-Ari-Gami/discoin.py",
+    url="https://git.gami.app/Discoin/discoin.py",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
