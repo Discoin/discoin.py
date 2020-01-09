@@ -42,7 +42,7 @@ class Discoin():
         :param code_from: (``string``) (Optional) 3 letter currency code that the transaction is coming from
         :param advanced_filter: (``string``) (Optional) Optionally, you can create your own filter. Not recommended 
 
-        :returns discoin.Transaction:
+        :rtype: [discoin.Transaction]
 
         :raises discoin.InternalServerError: If the discoin API returns a 5**
         :raises discoin.BadRequest: If the discoin API returns a 4**
@@ -81,7 +81,7 @@ class Discoin():
         :param amount: (``float``) The amount of currency in original format. 
         :param user_id: (``int``) The user_id from the user who requested the transaction
 
-        :returns discoin.Transaction:
+        :rtype: discoin.Transaction
 
         :raises discoin.InternalServerError: If the discoin API returns a 5**
         :raises discoin.BadRequest: If the discoin API returns a 4**
@@ -108,10 +108,10 @@ class Discoin():
         :param amount: (``float``) The amount of currency in original format. 
         :param user_id: (``int``) The user_id from the user who requested the transaction
 
-        :returns discoin.Transaction:
+        :rtype: discoin.Transaction
 
         :param id: (``str``) The id of the transaction you want to handle
-        :handled: = (``bool``) (Optional) Defaults to `True`. If you want to mark a transaction as unhandled, then set this to `False`
+        :handled: (``bool``) (Optional) Defaults to `True`. If you want to mark a transaction as unhandled, then set this to `False`
         '''
 
         json = {
@@ -127,7 +127,7 @@ class Discoin():
         '''
         This allows you to fetch the available currencies from the API
 
-        :returns discoin.Currency:
+        :rtype: [discoin.Currency]
 
         :raises discoin.InternalServerError: If the discoin API returns a 5**
         :raises discoin.WebTimeoutError: If the API times out
@@ -146,7 +146,7 @@ class Discoin():
         '''
         Fetch a list of bots compatible with discoin.
 
-        :returns discoin.Bot: 
+        :rtype: [discoin.Bot]
 
         :raises discoin.InternalServerError: If the discoin API returns a 5**
         :raises discoin.WebTimeoutError: If the API times out
