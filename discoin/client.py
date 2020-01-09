@@ -8,13 +8,17 @@ from .utils import api_request
 class Discoin():
     '''
     Main used class for discoin
-    
-    *`token` = Your api token for discoin (`string`)
-    *`me` = Your 3 letter currency code (`string`)
-    `loop` = Optional asyncio event loop
     '''
 
     def __init__(self, token: str, me: str, loop=None):
+        '''
+        Init client.
+
+        :param token: (``str``) Your api token for discoin 
+        :param me: (``me``) Your 3 letter currency code
+        :param loop: (``asyncio.EventLoop``) (Optional) Asyncio event loop
+        '''
+
         # Needed vars
         self._headers = {"Authorization": f"Bearer {token}"}
         self._me = me
@@ -29,15 +33,22 @@ class Discoin():
         '''
         Get a list of transactions. It is recommended to run this every 5 minutes in a loop
 
-        `transaction_id` = filter by a transaction id. (`string`)
-        `amount` = filter by the original amount (`int`)
-        `user_id` = filter by the user's id (`int`)
-        `handled` = Defaults to `False`. Will filter results to see if they are handled or not. `None` will fetch all ('bool')
-        `payout` = filter by the final amount (`int`)
-        `code` = 3 letter currency code that you want to search for. `None` will just fetch all results. Default is `me`. (`string`)
-        `code_from` = 3 letter currency code that the transaction is coming from
-        `advanced_filter` = Optionally, you can create your own filter. Not recommended (`string`)
+        :param transaction_id: (``str``) (Optional) Filter results by a transaction id.
+        :param amount: (``int``) (Optional) Filter results by the original amount
+        :param user_id: (``int``) (Optional) Filter by the user's id
+        :param handled: (``bool``) (Optional) Defaults to `False`. Will filter results to see if they are handled or not. `None` will fetch all 
+        :param payout: (``int``) (Optional) Filter by the final amount 
+        :param code: (``string``) (Optional) 3 letter currency code that you want to search for. ``None`` will just fetch all results. Default is `me`. 
+        :param code_from: (``string``) (Optional) 3 letter currency code that the transaction is coming from
+        :param advanced_filter: (``string``) (Optional) Optionally, you can create your own filter. Not recommended 
+
+        :returns discoin.Transaction:
+
+        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.BadRequest: If the discoin API returns a 4**
+        :raises discoin.WebTimeoutError: If the API times out
         '''
+
         transaction_id = kwargs.pop("transaction_id", None)
         amount = kwargs.pop("amount", None)
         user_id = kwargs.pop("user_id", None)
@@ -66,8 +77,15 @@ class Discoin():
         '''
         Create a transaction
 
-        *`code_to` = The 3 letter code to send a transaction to. ('str')
-        *`amount` = The amount of currency in original format. (`float`)
+        :param code_to: (``str``) The 3 letter code to send a transaction to. 
+        :param amount: (``float``) The amount of currency in original format. 
+        :param user_id: (``int``) The user_id from the user who requested the transaction
+
+        :returns discoin.Transaction:
+
+        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.BadRequest: If the discoin API returns a 4**
+        :raises discoin.WebTimeoutError: If the API times out
         '''
 
         code_to = code_to.upper()
@@ -86,8 +104,14 @@ class Discoin():
         '''
         Handling a transaction just marks it as handled, or processed.
 
-        *`id` = the id of the transaction you want to handle
-        `handled` = Defaults to `True`. If you want to mark a transaction as unhandled, then set this to `False`
+        :param code_to: (``str``) The 3 letter code to send a transaction to. 
+        :param amount: (``float``) The amount of currency in original format. 
+        :param user_id: (``int``) The user_id from the user who requested the transaction
+
+        :returns discoin.Transaction:
+
+        :param id: (``str``) The id of the transaction you want to handle
+        :handled: = (``bool``) (Optional) Defaults to `True`. If you want to mark a transaction as unhandled, then set this to `False`
         '''
 
         json = {
@@ -102,6 +126,11 @@ class Discoin():
     async def fetch_currencies(self):
         '''
         This allows you to fetch the available currencies from the API
+
+        :returns discoin.Currency:
+
+        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.WebTimeoutError: If the API times out
         '''
 
         api_response = await api_request(self._session, "GET", f"/currencies")
@@ -116,6 +145,11 @@ class Discoin():
     async def fetch_bots(self):
         '''
         Fetch a list of bots compatible with discoin.
+
+        :returns discoin.Bot: 
+
+        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.WebTimeoutError: If the API times out
         '''
 
         api_response = await api_request(self._session, "GET", f"/bots")

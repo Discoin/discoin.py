@@ -2,14 +2,16 @@ import datetime
 
 class Transaction():
     '''
-    `id` = The ID or receipt of the transaction (`str`)
-    `currency_from` = The currency object that the transaction is coming from (`Currency`)
-    `currency_to` = The currency object that the transaction is going to (`Currency`)
-    `amount` = The original amount of the transaction (`float`)
-    `user_id` = the id of the user who requested the transaction (`int`)
-    `handled` = if the transaction has been marked as proccessed (`bool`)
-    `timestamp` = The timestamp for when the transaction took place (`datetime.datetime`)
-    `payout` = The amount calculated to its final destination (`float`)
+    Transaction object
+
+    :param id: (``str``) The ID or receipt of the transaction 
+    :param currency_from: (``discoin.Currency``) The currency object that the transaction is coming from 
+    :param currency_to: (``discoin.Currency``) The currency object that the transaction is going to
+    :param amount: (``float``) The original amount of the transaction 
+    :param user_id: (``int``) the id of the user who requested the transaction 
+    :param handled: (``bool``) if the transaction has been marked as proccessed 
+    :param timestamp: (``datetime.datetime``) The timestamp for when the transaction took place 
+    :param payout: (``float``) The amount calculated to its final destination 
     '''
 
     def __init__(self, transaction_obj):
@@ -28,11 +30,14 @@ class Transaction():
 
 class Currency():
     '''
-    id = the 3 letter id of the currency
-    name = the provided name of the currency
-    value = the value the currency has
-    reserve = the amount of currency trade left
+    Currency Object
+    
+    :param id: (``str``) The 3 letter id of the currency
+    :param name: (``str``) The provided name of the currency
+    :param value: (``float``) The value the currency has
+    :param reserve: (``int``) The amount of currency trade left
     '''
+
     def __init__(self, currency_obj):
         self.id = currency_obj['id']
         self.name = currency_obj['name']
@@ -45,8 +50,10 @@ class Currency():
 
 class Bot():
     '''
-    id = The id of the bot. Can contain letters (`string`)
-    currency = the currency of the bot (`Currency`)
+    Discoin Bot Object
+
+    :param id: (``string``) The id of the bot. Can contain letters 
+    :param currency: (``discoin.Currency``) The currency of the bot 
     '''
     def __init__(self, bot_obj):
         self.id = bot_obj['id']

@@ -9,7 +9,9 @@ the following command
 
 ::
 
-    $ pip install discoin.py
+    $ pip install discoin
+
+|
 
 Integrating discoin
 -------------------
@@ -24,7 +26,7 @@ character of your currency.
 
     from discoin import Discoin
 
-    client = Discoin("Bearer TOKEN", "ABC")
+    client = Discoin("<TOKEN>", "ABC")
 
 You can also create a new client using a loop
                                              
@@ -35,5 +37,11 @@ You can also create a new client using a loop
     from discoin import Discoin
 
     loop = asyncio.get_event_loop()
-    client = Discoin("Bearer TOKEN", "ABC", loop=loop)
+    client = Discoin("<TOKEN>", "ABC", loop=loop)
 
+|
+
+Example
+-------
+
+An example cog for discord.py can be found `here <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py>`_
