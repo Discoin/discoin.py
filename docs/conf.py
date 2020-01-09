@@ -37,6 +37,7 @@ extensions = [
 
 autodoc_default_flags = ['members']
 autosummary_generate = True
+autodoc_mock_imports = ['discoin']
 
 # Add any paths that contain templates here, relative to this directory.
 master_doc = 'index'
