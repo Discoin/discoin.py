@@ -22,7 +22,7 @@ copyright = '2020, Dr_Ari_Gami'
 author = 'Dr_Ari_Gami'
 
 # The full version, including alpha/beta/rc tags
-release = '3.1.3'
+release = '3.1.4'
 
 
 # -- General configuration ---------------------------------------------------
@@ -35,6 +35,7 @@ extensions = [
 ]
 
 # Add any paths that contain templates here, relative to this directory.
+master_doc = 'index'
 templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
