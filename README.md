@@ -3,7 +3,7 @@
 ## Requirements
 * aiohttp
 
-Documentation can be found [here](https://github.com/Dr-Ari-Gami/discoin.py/wiki)
+Documentation can be found [here](https://discoinpy.readthedocs.io)
 
 ## Credits
 * [Dr_Ari_Gami](https://github.com/Dr-Ari-Gami/) (Main Developer)
