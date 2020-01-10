@@ -44,4 +44,4 @@ You can also create a new client using a loop
 Example
 -------
 
-An example cog for discord.py can be found `here <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py>`_
+An example cog for discord.py can be found `here <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py>`_. Just be sure to put your token and currency code at `L11 <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py#L11>`_, and be sure to add/remove currency at lines `L25 <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py#L25>`_, `L45 <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py#L45>`_, `L47 <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py#L47>`_, and `L57 <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_cog.py#L57>`_
