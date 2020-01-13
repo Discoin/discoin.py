@@ -5,13 +5,13 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="discoin",
-    version="3.1.8",
+    version="3.1.10",
     author="Dr_Ari_Gami",
     author_email="drarigami@gmail.com",
     description="Official Discoin Package",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://git.gami.app/Discoin/discoin.py",
+    url="https://github.com/Discoin/discoin.py",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
