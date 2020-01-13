@@ -22,7 +22,7 @@ copyright = '2020, Dr_Ari_Gami'
 author = 'Dr_Ari_Gami'
 
 # The full version, including alpha/beta/rc tags
-release = '3.1.10'
+release = '3.1.11'
 
 
 # -- General configuration ---------------------------------------------------

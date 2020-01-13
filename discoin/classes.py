@@ -15,23 +15,27 @@ class Transaction():
     '''
 
     def __init__(self, transaction_obj):
-        self.id = transaction_obj['id']
-        self.currency_from = Currency(transaction_obj['from'])
-        self.currency_to = Currency(transaction_obj['to'])
+        self.id = transaction_obj.get('id')
+        self.currency_from = Currency(transaction_obj.get('from'))
+        self.currency_to = Currency(transaction_obj.get('to'))
 
-        if transaction_obj['amount'] == None: # This is implemented due to a bug with discoin's API
+        if transaction_obj.get('amount') == None: # This is implemented due to a bug with discoin's API
             self.amount = 0.0
         else:
-            self.amount = float(transaction_obj['amount']) # This is the amount from the original source
+            self.amount = float(transaction_obj.get('amount')) # This is the amount from the original source
 
-        self.user_id = int(transaction_obj['user'])
-        self.handled = transaction_obj['handled']
-        self.timestamp = datetime.datetime.strptime(transaction_obj['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
+        self.user_id = int(transaction_obj.get('user'))
+        self.handled = transaction_obj.get('handled')
+
+        if transaction_obj.get('timestamp') == None: # This is implemented due to a bug with discoin's API
+            self.timestamp = None
+        else:
+            self.timestamp = datetime.datetime.strptime(transaction_obj.get('timestamp'), "%Y-%m-%dT%H:%M:%S.%fZ")
         
-        if transaction_obj['payout'] == None: # This is implemented due to a bug with discoin's API
+        if transaction_obj.get('payout') == None: # This is implemented due to a bug with discoin's API
             self.payout = 0.0
         else:
-            self.payout = float(transaction_obj['payout']) # This is the amount calculated to its final destination
+            self.payout = float(transaction_obj.get('payout')) # This is the amount calculated to its final destination
 
     def __str__(self):
         return f"Transaction({self.id})"
@@ -44,15 +48,15 @@ class Currency():
     :param id: (``str``) The 3 letter id of the currency
     :param name: (``str``) The provided name of the currency
     :param value: (``float``) The value the currency has
-    :param reserve: (``int``) The amount of currency trade left
+    :param reserve: (``float``) The amount of currency trade left
     '''
 
     def __init__(self, currency_obj):
-        self.id = currency_obj['id']
-        self.name = currency_obj['name']
+        self.id = currency_obj.get('id')
+        self.name = currency_obj.get('name')
         self.value = currency_obj.get('value')
 
-        if currency_obj['reserve'] == None: # This is implemented due to a bug with discoin's API
+        if currency_obj.get('reserve') == None: # This is implemented due to a bug with discoin's API
             self.reserve = None
         else:
             self.reserve = float(currency_obj.get('reserve'))
@@ -69,8 +73,8 @@ class Bot():
     :param currency: (``discoin.Currency``) The currency of the bot 
     '''
     def __init__(self, bot_obj):
-        self.id = bot_obj['id']
-        self.currency = Currency(bot_obj['currency'])
+        self.id = bot_obj.get('id')
+        self.currency = Currency(bot_obj.get('currency'))
 
     def __str__(self):
         return f"Bot({self.id})"
