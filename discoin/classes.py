@@ -51,7 +51,11 @@ class Currency():
         self.id = currency_obj['id']
         self.name = currency_obj['name']
         self.value = currency_obj.get('value')
-        self.reserve = currency_obj.get('reserve')
+
+        if currency_obj['reserve'] == None: # This is implemented due to a bug with discoin's API
+            self.reserve = None
+        else:
+            self.reserve = float(currency_obj.get('reserve'))
 
     def __str__(self):
         return f"Currency({self.id})"
