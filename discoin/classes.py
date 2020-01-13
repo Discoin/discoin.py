@@ -18,11 +18,20 @@ class Transaction():
         self.id = transaction_obj['id']
         self.currency_from = Currency(transaction_obj['from'])
         self.currency_to = Currency(transaction_obj['to'])
-        self.amount = float(transaction_obj['amount']) # This is the amount from the original source
+
+        if transaction_obj['amount'] == None: # This is implemented due to a bug with discoin's API
+            self.amount = 0.0
+        else:
+            self.amount = float(transaction_obj['amount']) # This is the amount from the original source
+
         self.user_id = int(transaction_obj['user'])
         self.handled = transaction_obj['handled']
         self.timestamp = datetime.datetime.strptime(transaction_obj['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
-        self.payout = float(transaction_obj['payout']) # This is the amount calculated to its final destination
+        
+        if transaction_obj['payout'] == None: # This is implemented due to a bug with discoin's API
+            self.payout = 0.0
+        else:
+            self.payout = float(transaction_obj['payout']) # This is the amount calculated to its final destination
 
     def __str__(self):
         return f"Transaction({self.id})"
