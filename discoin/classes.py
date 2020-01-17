@@ -54,7 +54,11 @@ class Currency():
     def __init__(self, currency_obj):
         self.id = currency_obj.get('id')
         self.name = currency_obj.get('name')
-        self.value = currency_obj.get('value')
+
+        if currency_obj.get('value') == None: # This is implemented due to a bug with discoin's API
+            self.value = None
+        else:
+            self.value = currency_obj.get('value')
 
         if currency_obj.get('reserve') == None: # This is implemented due to a bug with discoin's API
             self.reserve = None
