@@ -14,6 +14,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../'))
 
+import discoin
 
 # -- Project information -----------------------------------------------------
 
@@ -22,7 +23,7 @@ copyright = '2020, Dr_Ari_Gami'
 author = 'Dr_Ari_Gami'
 
 # The full version, including alpha/beta/rc tags
-release = '3.1.11'
+release = discoin.__version__
 
 
 # -- General configuration ---------------------------------------------------

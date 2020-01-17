@@ -1,11 +1,12 @@
 import setuptools
+import discoin
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="discoin",
-    version="3.1.11",
+    version=discoin.__version__,
     author="Dr_Ari_Gami",
     author_email="drarigami@gmail.com",
     description="Official Discoin Package",
