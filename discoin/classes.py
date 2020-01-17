@@ -56,12 +56,12 @@ class Currency():
         self.name = currency_obj.get('name')
 
         if currency_obj.get('value') == None or currency_obj.get('value') == "NaN": # This is implemented due to a bug with discoin's API
-            self.value = None
+            self.value = 0.0
         else:
             self.value = float(currency_obj.get('value'))
 
         if currency_obj.get('reserve') == None: # This is implemented due to a bug with discoin's API
-            self.reserve = None
+            self.reserve = 0.0
         else:
             self.reserve = float(currency_obj.get('reserve'))
 
