@@ -5,7 +5,7 @@ from .classes import Transaction, Currency, Bot
 from .utils import api_request
 
 
-class Discoin():
+class Client():
     '''
     Main used class for discoin
     '''
@@ -38,9 +38,9 @@ class Discoin():
         :param user_id: (``int``) (Optional) Filter by the user's id
         :param handled: (``bool``) (Optional) Defaults to `False`. Will filter results to see if they are handled or not. `None` will fetch all 
         :param payout: (``int``) (Optional) Filter by the final amount 
-        :param code: (``string``) (Optional) 3 letter currency code that you want to search for. ``None`` will just fetch all results. Default is `me`. 
-        :param code_from: (``string``) (Optional) 3 letter currency code that the transaction is coming from
-        :param advanced_filter: (``string``) (Optional) Optionally, you can create your own filter. Not recommended 
+        :param code: (``str``) (Optional) 3 letter currency code that you want to search for. ``None`` will just fetch all results. Default is `me`. 
+        :param code_from: (``str``) (Optional) 3 letter currency code that the transaction is coming from
+        :param advanced_filter: (``str``) (Optional) Optionally, you can create your own filter. Not recommended 
 
         :rtype: [discoin.Transaction]
 
@@ -73,13 +73,14 @@ class Discoin():
         
         return transactions
 
-    async def create_transaction(self, code_to: str, amount: float, user_id: int):
+    async def create_transaction(self, code_to: str, amount: float, user_id: int, code_from: str = __self__._me):
         '''
         Create a transaction
 
         :param code_to: (``str``) The 3 letter code to send a transaction to. 
         :param amount: (``float``) The amount of currency in original format. 
         :param user_id: (``int``) The user_id from the user who requested the transaction
+        :param code_from: (``str``) (Optional) The 3 letter code to send a transaction from. 
 
         :rtype: discoin.Transaction
 
@@ -91,7 +92,7 @@ class Discoin():
         code_to = code_to.upper()
         json = {
             "amount": amount,
-            "from": self._me,
+            "from": code_from,
             "to": code_to,
             "user": str(user_id),
         }
