@@ -24,9 +24,9 @@ character of your currency.
 
 .. code:: py
 
-    from discoin import Discoin
+    from discoin import Client
 
-    client = Discoin("<TOKEN>", "ABC")
+    client = Client("<TOKEN>", "ABC")
 
 You can also create a new client using a loop
                                              
@@ -34,10 +34,10 @@ You can also create a new client using a loop
 .. code:: py
 
     import asyncio
-    from discoin import Discoin
+    from discoin import Client
 
     loop = asyncio.get_event_loop()
-    client = Discoin("<TOKEN>", "ABC", loop=loop)
+    client = Client("<TOKEN>", "ABC", loop=loop)
 
 |
 

@@ -12,11 +12,3 @@ discoin.Currency
    .. rubric:: Methods
 
    .. autosummary::
-   
-      ~Currency.__init__
-   
-   
-
-   
-   
-   

@@ -10,12 +10,12 @@ Client
 .. autosummary::
    :toctree: stubs
    
-   discoin.Discoin
-   discoin.Discoin.fetch_transactions
-   discoin.Discoin.create_transaction
-   discoin.Discoin.handle_transaction
-   discoin.Discoin.fetch_currencies
-   discoin.Discoin.fetch_bots
+   discoin.Client
+   discoin.Client.fetch_transactions
+   discoin.Client.create_transaction
+   discoin.Client.handle_transaction
+   discoin.Client.fetch_currencies
+   discoin.Client.fetch_bots
 
 |
 

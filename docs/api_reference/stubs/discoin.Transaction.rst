@@ -12,11 +12,3 @@ discoin.Transaction
    .. rubric:: Methods
 
    .. autosummary::
-   
-      ~Transaction.__init__
-   
-   
-
-   
-   
-   

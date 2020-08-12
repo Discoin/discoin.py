@@ -12,11 +12,3 @@ discoin.Bot
    .. rubric:: Methods
 
    .. autosummary::
-   
-      ~Bot.__init__
-   
-   
-
-   
-   
-   
