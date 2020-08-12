@@ -73,7 +73,7 @@ class Client():
         
         return transactions
 
-    async def create_transaction(self, code_to: str, amount: float, user_id: int, code_from: str = __self__._me):
+    async def create_transaction(self, code_to: str, amount: float, user_id: int, code_from: str = None):
         '''
         Create a transaction
 
@@ -89,6 +89,7 @@ class Client():
         :raises discoin.WebTimeoutError: If the API times out
         '''
 
+        code_from = self._me if code_from is None else code_from.upper()
         code_to = code_to.upper()
         json = {
             "amount": amount,
