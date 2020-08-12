@@ -91,7 +91,8 @@ class Discoin():
         code_to = code_to.upper()
         json = {
             "amount": amount,
-            "toId": code_to,
+            "from": self._me,
+            "to": code_to,
             "user": str(user_id),
         }
 

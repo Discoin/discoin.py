@@ -1,2 +1,2 @@
 DOMAIN = "https://discoin.zws.im"
-VERSION = "3.1.14"
+VERSION = "3.2.1"

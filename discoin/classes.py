@@ -19,7 +19,7 @@ class Transaction():
         self.currency_from = Currency(transaction_obj.get('from'))
         self.currency_to = Currency(transaction_obj.get('to'))
 
-        if transaction_obj.get('amount') == None: # This is implemented due to a bug with discoin's API
+        if transaction_obj.get('amount') is None: # This is implemented due to a bug with discoin's API
             self.amount = 0.0
         else:
             self.amount = float(transaction_obj.get('amount')) # This is the amount from the original source
@@ -27,12 +27,12 @@ class Transaction():
         self.user_id = int(transaction_obj.get('user'))
         self.handled = transaction_obj.get('handled')
 
-        if transaction_obj.get('timestamp') == None: # This is implemented due to a bug with discoin's API
+        if transaction_obj.get('timestamp') is None: # This is implemented due to a bug with discoin's API
             self.timestamp = None
         else:
             self.timestamp = datetime.datetime.strptime(transaction_obj.get('timestamp'), "%Y-%m-%dT%H:%M:%S.%fZ")
         
-        if transaction_obj.get('payout') == None: # This is implemented due to a bug with discoin's API
+        if transaction_obj.get('payout') is None: # This is implemented due to a bug with discoin's API
             self.payout = 0.0
         else:
             self.payout = float(transaction_obj.get('payout')) # This is the amount calculated to its final destination
@@ -55,12 +55,12 @@ class Currency():
         self.id = currency_obj.get('id')
         self.name = currency_obj.get('name')
 
-        if currency_obj.get('value') == None or currency_obj.get('value') == "NaN": # This is implemented due to a bug with discoin's API
+        if currency_obj.get('value') is None or currency_obj.get('value') == "NaN": # This is implemented due to a bug with discoin's API
             self.value = 0.0
         else:
             self.value = float(currency_obj.get('value'))
 
-        if currency_obj.get('reserve') == None: # This is implemented due to a bug with discoin's API
+        if currency_obj.get('reserve') is None: # This is implemented due to a bug with discoin's API
             self.reserve = 0.0
         else:
             self.reserve = float(currency_obj.get('reserve'))
@@ -74,11 +74,11 @@ class Bot():
     Discoin Bot Object
 
     :param id: (``string``) The id of the bot. Can contain letters 
-    :param currency: (``discoin.Currency``) The currency of the bot 
+    :param currencies: (``List[discoin.Currency]``) The currencies of the bot 
     '''
     def __init__(self, bot_obj):
         self.id = bot_obj.get('id')
-        self.currency = Currency(bot_obj.get('currency'))
+        self.currencies = [Currency(currency) for currency in bot_obj.get('currencies')]
 
     def __str__(self):
         return f"Bot({self.id})"
