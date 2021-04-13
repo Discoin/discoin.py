@@ -19,7 +19,7 @@ Integrating discoin
 *discoin.py* configuration is the most important part of the process.
 You will see and notice, it is really hard! So you will need 2
 information to get it up and running. First is your Discoin token
-provided by *PizzaFox#0075*. Second information is the 3 digits
+provided by *Jonah#6905*. Second information is the 3 digits
 character of your currency.
 
 .. code:: py
