@@ -1,2 +1,2 @@
-DOMAIN = "https://discoin.zws.im"
-VERSION = "4.0"
+DOMAIN = "https://discoin.dev/api"
+VERSION = "5.0.0"

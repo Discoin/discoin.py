@@ -1,6 +1,6 @@
 # Discoin for Python
 
-This is the official discoin library for python. Here is discoin's [Gitbook](https://discoin.gitbook.io/docs/)
+This is the official discoin library for python. Here is discoin's [API documentation](https://discoin.dev/api/docs)
 
 ## Requirements
 * Python 3.6 or up
@@ -12,6 +12,9 @@ $ pip install discoin
 ```
 
 Documentation can be found [here](https://discoinpy.readthedocs.io)
+
+## Events and undone transactions
+`Client.start()` reads your bot's event feed in the background and calls the handlers registered with `@client.listen(...)`. `Client.fetch_undone_transactions()` lists the refunded, cancelled and reversed transactions your bot has not marked handled, and `Client.mark_handled()` marks one. Both are described in the [getting started guide](https://discoinpy.readthedocs.io/en/latest/getting_started.html).
 
 ## Credits
 * [Dr_Ari_Gami](https://github.com/Dr-Ari-Gami/) (Main Developer)

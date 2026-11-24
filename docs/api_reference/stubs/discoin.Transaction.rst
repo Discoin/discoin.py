@@ -7,8 +7,3 @@ discoin.Transaction
 
    
    .. automethod:: __init__
-
-   
-   .. rubric:: Methods
-
-   .. autosummary::

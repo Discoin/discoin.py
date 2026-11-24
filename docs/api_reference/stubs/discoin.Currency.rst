@@ -7,8 +7,3 @@ discoin.Currency
 
    
    .. automethod:: __init__
-
-   
-   .. rubric:: Methods
-
-   .. autosummary::

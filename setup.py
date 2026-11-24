@@ -1,12 +1,15 @@
+import re
 import setuptools
-import discoin
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open("discoin/config.py", "r") as fh:
+    version = re.search(r'^VERSION = "(.+)"$', fh.read(), re.MULTILINE).group(1)
+
 setuptools.setup(
     name="discoin",
-    version=discoin.__version__,
+    version=version,
     author="Dr_Ari_Gami",
     author_email="drarigami@gmail.com",
     description="Official Discoin Package",
@@ -19,5 +22,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+    install_requires=["aiohttp>=3.8"],
     python_requires='>=3.6',
 )
