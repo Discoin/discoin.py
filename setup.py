@@ -10,8 +10,7 @@ with open("discoin/config.py", "r") as fh:
 setuptools.setup(
     name="discoin",
     version=version,
-    author="Dr_Ari_Gami",
-    author_email="drarigami@gmail.com",
+    author="DeveloperAnonymous",
     description="Official Discoin Package",
     long_description=long_description,
     long_description_content_type="text/markdown",
