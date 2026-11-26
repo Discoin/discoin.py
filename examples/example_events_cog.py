@@ -154,7 +154,7 @@ class Economy(commands.Cog):
 
             return
 
-        error = self.discoin_client.events_error # A handler that raises, an event that cannot be parsed, a 4** other than a 429, a 429 without a `Retry-After` header in whole seconds, or a webhook URL on the bot (a 409) stops the feed
+        error = self.discoin_client.events_error # A handler that raises, an event that cannot be parsed, a 4** other than a 429, or a webhook URL on the bot (a 409) stops the feed
         if error is None:
             await ctx.send("The Discoin event feed is stopped")
 

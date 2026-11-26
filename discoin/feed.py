@@ -2,20 +2,14 @@ import asyncio
 import inspect
 import logging
 
-import aiohttp
-
 from .classes import TransactionEvent
-from .errors import BadRequest, InternalServerError, RateLimited, WebTimeoutError
+from .errors import BadRequest
 
 HANDLER_PREFIX = "on_"
 EVERY_EVENT_HANDLER_NAME = "on_event"
 POLL_INTERVAL_SECONDS = 2
 FULL_BATCH_SIZE = 100
-BACKOFF_START_SECONDS = 1
-BACKOFF_CAP_SECONDS = 60
-BACKOFF_FACTOR = 2
 WEBHOOK_URL_SET_STATUS = 409
-TRANSIENT_ERRORS = (InternalServerError, WebTimeoutError, asyncio.TimeoutError, aiohttp.ClientError)
 
 logger = logging.getLogger(__name__)
 
@@ -138,20 +132,12 @@ class EventFeed():
 
         await self._request(lambda: self._acknowledge_events(event_id))
 
+    # The client retries a 5**, a 429, a timeout and a network error itself, with backoff (see `retry.with_backoff`). What it raises after its last retry stops the feed
     async def _request(self, send):
-        backoff = BACKOFF_START_SECONDS
-
-        while True:
-            try:
-                return await send()
-            except RateLimited as error:
-                await _wait_out_rate_limit(error)
-            except BadRequest as error:
-                _raise_as_stop(error)
-            except TRANSIENT_ERRORS as error:
-                logger.warning("An event feed request failed, retrying in %s seconds: %r", backoff, error)
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * BACKOFF_FACTOR, BACKOFF_CAP_SECONDS)
+        try:
+            return await send()
+        except BadRequest as error:
+            _raise_as_stop(error)
 
 
 def _raise_as_stop(error):
@@ -159,11 +145,3 @@ def _raise_as_stop(error):
         raise _FeedRefused() from error
 
     raise error
-
-
-async def _wait_out_rate_limit(error):
-    if error.retry_after is None:
-        raise error
-
-    logger.warning("The event feed is rate limited, retrying in %s seconds.", error.retry_after)
-    await asyncio.sleep(error.retry_after)

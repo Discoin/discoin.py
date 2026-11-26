@@ -3,7 +3,8 @@ from urllib.parse import quote, urlencode
 
 from .classes import Transaction, Currency, TransactionStatus, TransactionEvent
 from .feed import EventFeed
-from .utils import api_request
+from .retry import DEFAULT_MAX_RETRIES, is_retryable, never_reached_api, with_backoff
+from .utils import send_request
 
 
 class Client():
@@ -11,17 +12,23 @@ class Client():
     Main used class for discoin
     """
 
-    def __init__(self, token: str, me: str = None):
+    def __init__(self, token: str, me: str = None, max_retries: int = DEFAULT_MAX_RETRIES):
         """
         Init client.
 
+        Every request is retried on a 5**, a 429, a timeout or a network error, with a wait that starts at 1 second and doubles up to 128 seconds.
+        A 429 with a `Retry-After` header waits the seconds the header names instead. Other 4** are raised at once.
+        `create_transaction` is the exception: it only retries when the connection to the API could not be made, so it never creates a transaction twice.
+
         :param token: (``str``) Your api token for discoin 
         :param me: (``str``) (Optional) Your 3 letter currency code, the default `code_from` of `create_transaction` and `fetch_quote`. Leave it out if your bot runs several currencies
+        :param max_retries: (``int``) (Optional) The most retries of a request, after which its last error is raised. Default is 8, so a request gives up after the retry that follows the first 128 second wait. ``None`` retries until the request succeeds. It also applies to the requests of the event feed
         """
 
         # Needed vars
         self._headers = {"Authorization": f"Bearer {token}"}
         self._me = me
+        self._max_retries = max_retries
         self._session = None
         self._feed = EventFeed(self, self._fetch_event_objs, self.acknowledge_events)
 
@@ -63,8 +70,8 @@ class Client():
         The feed stops when a handler raises or an event cannot be parsed. It acknowledges the events handled before that one,
         logs the error once and keeps it in `events_error`. The API sends the other events again after the next `start`.
         A 4** other than a 429 stops it the same way. A 429 is waited out for the seconds of its `Retry-After` header,
-        and a 5**, a timeout or a network error is retried with a growing wait, up to 60 seconds.
-        A 429 without a `Retry-After` header in whole seconds stops the feed.
+        and a 429 without one, a 5**, a timeout or a network error is retried with a wait that doubles up to 128 seconds.
+        When a request still fails after `max_retries` retries, the feed stops the same way as for a 4**.
 
         If the bot has a webhook URL, the API returns a 409 on the events routes. The feed then logs one warning and stops.
         It does not raise and does not retry, and `events_error` holds the 409.
@@ -103,9 +110,9 @@ class Client():
         :rtype: [discoin.Transaction]
 
         :raises TypeError: If any keyword argument other than `code` is given
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A `code` your bot does not run returns a 403
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         code = kwargs.pop("code", None)
@@ -134,9 +141,9 @@ class Client():
         :rtype: [discoin.Transaction]
 
         :raises TypeError: If any keyword argument other than `code` and `limit` is given
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A 400 if `limit` is not from 1 to 100, a 403 if your bot does not run `code`, a 404 if `code` does not exist or was removed
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         code = kwargs.pop("code", None)
@@ -157,12 +164,12 @@ class Client():
 
         :param transaction_id: (``str``) The UUID of the transaction
 
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A 400 if the transaction was not undone on your bot's side, a 403 if your bot runs neither of its currencies, a 404 if it does not exist
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
-        await api_request(self._open_session(), "PUT", f"/transactions/{transaction_id}/handled", headers=self._headers)
+        await self._request("PUT", f"/transactions/{transaction_id}/handled", headers=self._headers)
 
     async def fetch_events(self, after: int = None, limit: int = None):
         """
@@ -173,10 +180,10 @@ class Client():
 
         :rtype: [discoin.TransactionEvent]
 
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A 409 if your bot has a webhook URL, a 422 if `after` or `limit` is not accepted
-        :raises discoin.RateLimited: If the discoin API returns a 429
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.RateLimited: If the discoin API returns a 429 on every attempt `max_retries` allows
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         event_objs = await self._fetch_event_objs(after=after, limit=limit)
@@ -191,17 +198,17 @@ class Client():
 
         :param event_id: (``int``) The ID of the newest event to acknowledge
 
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A 400 with the field `id` if `event_id` is above your bot's newest event, a 409 if your bot has a webhook URL
-        :raises discoin.RateLimited: If the discoin API returns a 429
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.RateLimited: If the discoin API returns a 429 on every attempt `max_retries` allows
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         json = {
             "id": event_id,
         }
 
-        await api_request(self._open_session(), "POST", "/events/ack", headers=self._headers, json=json)
+        await self._request("POST", "/events/ack", headers=self._headers, json=json)
 
     async def create_transaction(self, code_to: str, amount: float, user_id: int, code_from: str = None):
         """
@@ -214,10 +221,15 @@ class Client():
 
         :rtype: discoin.Transaction
 
+        Creating the transaction is only retried when the connection to the API could not be made, since the API may have created it
+        before a 5**, a 429 or a timeout. On those, check `fetch_pending_transactions` of the receiving bot or your own records before calling it again.
+        Looking up the currency IDs before it is retried like any other request.
+
         :raises TypeError: If `code_from` is not given and the client has no `me`
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
-        :raises discoin.BadRequest: If the discoin API returns a 4**. A 403 if `code_from` is not run by your bot, or if the user is blocked from converting these currencies
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.InternalServerError: If the discoin API returns a 5**, without a retry
+        :raises discoin.BadRequest: If the discoin API returns a 4**, without a retry. A 403 if `code_from` is not run by your bot, or if the user is blocked from converting these currencies
+        :raises discoin.WebTimeoutError: If the API times out after the request was sent, without a retry, or while connecting on every attempt `max_retries` allows
+        :raises aiohttp.ClientConnectorError: If the connection to the API cannot be made on every attempt `max_retries` allows
         """
 
         from_currency_id, to_currency_id = await self._fetch_route_currency_ids(code_to, code_from)
@@ -228,7 +240,8 @@ class Client():
             "amount": amount,
         }
 
-        api_response = await api_request(self._open_session(), "POST", "/transactions", headers=self._headers, json=json)
+        # A retry after the request reached the API could create the transaction twice
+        api_response = await self._request("POST", "/transactions", headers=self._headers, json=json, should_retry=never_reached_api)
         api_response_json = await api_response.json()
 
         return Transaction(api_response_json)
@@ -244,9 +257,9 @@ class Client():
         :rtype: float
 
         :raises TypeError: If `code_from` is not given and the client has no `me`
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         from_currency_id, to_currency_id = await self._fetch_route_currency_ids(code_to, code_from)
@@ -256,7 +269,7 @@ class Client():
             "amount": amount,
         })
 
-        api_response = await api_request(self._open_session(), "GET", f"/quote?{query}")
+        api_response = await self._request("GET", f"/quote?{query}")
         api_response_json = await api_response.json()
 
         return float(api_response_json['payout'])
@@ -270,9 +283,9 @@ class Client():
 
         :rtype: discoin.Transaction
 
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A 400 if the transaction is not `Pending`, a 403 if your bot does not receive it, a 404 if it does not exist
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         return await self._update_transaction_status(transaction_id, TransactionStatus.COMPLETED)
@@ -287,9 +300,9 @@ class Client():
 
         :rtype: discoin.Transaction
 
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
         :raises discoin.BadRequest: If the discoin API returns a 4**. A 400 if the transaction is not `Pending`, a 403 if your bot does not receive it, a 404 if it does not exist
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         return await self._update_transaction_status(transaction_id, TransactionStatus.REFUNDED)
@@ -300,11 +313,11 @@ class Client():
 
         :rtype: [discoin.Currency]
 
-        :raises discoin.InternalServerError: If the discoin API returns a 5**
-        :raises discoin.WebTimeoutError: If the API times out
+        :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
+        :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
-        api_response = await api_request(self._open_session(), "GET", f"/currencies")
+        api_response = await self._request("GET", "/currencies")
         api_response_json = await api_response.json()
         currencies = []
 
@@ -314,13 +327,13 @@ class Client():
         return currencies
 
     async def _fetch_transactions(self, url_path: str):
-        api_response = await api_request(self._open_session(), "GET", url_path, headers=self._headers)
+        api_response = await self._request("GET", url_path, headers=self._headers)
         api_response_json = await api_response.json()
 
         return [Transaction(transaction_obj) for transaction_obj in api_response_json]
 
     async def _fetch_event_objs(self, **query):
-        api_response = await api_request(self._open_session(), "GET", _with_query("/events", **query), headers=self._headers)
+        api_response = await self._request("GET", _with_query("/events", **query), headers=self._headers)
         api_response_json = await api_response.json()
 
         return api_response_json['events']
@@ -330,7 +343,7 @@ class Client():
             "status": status.value,
         }
 
-        api_response = await api_request(self._open_session(), "PATCH", f"/transactions/{transaction_id}", headers=self._headers, json=json)
+        api_response = await self._request("PATCH", f"/transactions/{transaction_id}", headers=self._headers, json=json)
         api_response_json = await api_response.json()
 
         return Transaction(api_response_json)
@@ -356,8 +369,16 @@ class Client():
 
         return self._session
 
+    async def _request(self, method: str, url_path: str, headers: dict = None, json: dict = None, should_retry=is_retryable):
+        # The session is looked up on each attempt, since `close` can drop it while a retry waits
+        return await with_backoff(
+            lambda: send_request(self._open_session(), method, url_path, headers=headers, json=json),
+            self._max_retries,
+            should_retry,
+        )
+
     async def _fetch_currency_id(self, code: str):
-        api_response = await api_request(self._open_session(), "GET", f"/currencies/{quote(code, safe='')}")
+        api_response = await self._request("GET", f"/currencies/{quote(code, safe='')}")
         api_response_json = await api_response.json()
 
         return api_response_json['id']

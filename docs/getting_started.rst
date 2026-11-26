@@ -48,6 +48,25 @@ its session when the block ends
     async with Client("<TOKEN>", "ABC") as client:
         currencies = await client.fetch_currencies()
 
+Every request the client makes is retried on a 5**, a 429, a timeout
+or a network error. The wait starts at 1 second and doubles up to 128
+seconds, and a 429 with a ``Retry-After`` header waits the seconds it
+names instead. Other 4** are raised at once. By default a request gives
+up after 8 retries, the one that follows the first wait of 128 seconds,
+and raises the last error. Pass ``max_retries`` to change that, or
+``None`` to retry until the request succeeds
+
+``create_transaction`` only retries when the connection to the API
+could not be made. After a 5**, a 429 or a timeout the API may already
+have created the transaction, so it raises the error at once instead of
+creating a second one
+
+.. code:: py
+
+    from discoin import Client
+
+    client = Client("<TOKEN>", "ABC", max_retries=5)
+
 |
 
 Events
@@ -136,8 +155,10 @@ handlers on it is allowed, and nothing is called.
 - The API allows 300 requests a minute per token and answers a 429 with
   a ``Retry-After`` header above that. The feed waits that long, then
   continues.
-- The feed retries a 5**, a timeout and a network error, with a wait
-  that grows up to 60 seconds.
+- The feed retries a 5**, a timeout, a network error and a 429 without
+  a ``Retry-After`` header, with a wait that starts at 1 second and
+  doubles up to 128 seconds. A request that still fails after
+  ``max_retries`` retries, 8 by default, stops the feed.
 
 **When the feed stops**
 
@@ -146,9 +167,8 @@ handlers on it is allowed, and nothing is called.
   error is logged with the ``discoin`` logger and kept in
   ``client.events_error``, and ``client.events_running`` turns
   ``False``. After the next ``start()`` the API sends the event again.
-- A 4** other than a 429 stops the feed the same way.
-- A 429 without a ``Retry-After`` header in whole seconds stops the
-  feed.
+- A 4** other than a 429 stops the feed the same way, and so does a
+  request that still fails after ``max_retries`` retries.
 
 **Webhooks**
 
