@@ -20,9 +20,6 @@ Client
    discoin.Client.fetch_undone_transactions
    discoin.Client.mark_handled
    discoin.Client.start
-   discoin.Client.listen
-   discoin.Client.add_listener
-   discoin.Client.remove_listener
    discoin.Client.fetch_events
    discoin.Client.acknowledge_events
    discoin.Client.close

@@ -54,36 +54,48 @@ Events
 ------
 
 The API keeps a feed of events for each bot. *discoin.py* can read it in
-the background and call your handlers
+the background and call the handler methods of a ``Client`` subclass
 
 .. code:: py
 
-    from discoin import Client, EventType
+    from discoin import Client
 
-    client = Client("<TOKEN>", "ABC")
+    class MyClient(Client):
+        async def on_transaction_created(self, event):
+            print(event.id, event.event, event.transaction.payout)
 
-    @client.listen(EventType.CREATED)
-    async def on_created(event):
-        print(event.id, event.event, event.transaction.payout)
+    client = MyClient("<TOKEN>", "ABC")
 
     await client.start()
 
 ``start()`` returns at once, and the feed runs as a background task in
 the running loop. There is no ``run()``. ``close()`` stops the feed.
-A client that was never started makes no events request. Registering
+A client that was never started makes no events request. Defining
 handlers on it is allowed, and nothing is called.
 
 **Handlers**
 
-- ``client.listen(event)`` is a decorator, and
-  ``client.add_listener(callback, event)`` does the same as a method.
-  ``client.remove_listener(callback, event)`` removes a handler.
-- A handler is a coroutine function that gets one argument, the
-  ``TransactionEvent``.
-- ``EventType.ALL`` registers a handler for every event.
-- Handlers run one at a time, in the order they were registered. The
-  next event waits until every handler of the current one returned, so
-  a slow handler delays the reads.
+- A handler is a coroutine method of a ``Client`` subclass that gets
+  one argument, the ``TransactionEvent``.
+- The method name is ``on_`` followed by the event name, with every
+  ``.`` replaced by ``_``. ``transaction.created`` calls
+  ``on_transaction_created``, ``transaction.cancelled`` calls
+  ``on_transaction_cancelled``, ``transaction.reversed`` calls
+  ``on_transaction_reversed`` and ``transaction.test`` calls
+  ``on_transaction_test``. An event name the API adds later calls the
+  method named the same way.
+- ``on_event`` gets every event.
+- An event name with a character that a method name cannot have, other
+  than the ``.``, has no named handler and only reaches ``on_event``.
+- ``Client`` itself defines no handler. A plain ``Client`` works for
+  every other call.
+- ``start()`` takes every attribute of the client whose name starts
+  with ``on_`` as a handler. It raises a ``TypeError`` if one of them
+  is not a coroutine function. On a client that has none, it starts no
+  feed and ``client.events_running`` stays ``False``.
+- Handlers run one at a time, the named handler first, then
+  ``on_event``. The next event waits until every handler of the
+  current one returned, so a slow handler delays the reads.
 - ``event.event`` and ``event.triggered_by.kind`` are plain strings.
   ``EventType`` and ``TriggerKind`` list the values the API sends today,
   and other values can appear later.
@@ -111,14 +123,14 @@ handlers on it is allowed, and nothing is called.
 **Reading and acknowledging**
 
 - The feed reads about every 2 seconds, and at once after a full batch
-  of 100 events. It makes no request while no handler is registered.
+  of 100 events. A client that defines no handler makes no events
+  request.
 - After the handlers of a whole batch returned, the feed acknowledges
   the highest event ID of the batch. The API sends acknowledged events
   no more.
-- An event that no registered handler matches is acknowledged with its
-  batch all the same. A bot that only registers
-  ``EventType.CREATED`` does not see its cancelled or reversed events
-  again.
+- An event that has no handler is acknowledged with its batch all the
+  same. A bot that only defines ``on_transaction_created`` does not see
+  its cancelled or reversed events again.
 - Delivery is at least once. A bot that stops between handling an event
   and acknowledging it gets that event again.
 - The API allows 300 requests a minute per token and answers a 429 with
@@ -135,6 +147,8 @@ handlers on it is allowed, and nothing is called.
   ``client.events_error``, and ``client.events_running`` turns
   ``False``. After the next ``start()`` the API sends the event again.
 - A 4** other than a 429 stops the feed the same way.
+- A 429 without a ``Retry-After`` header in whole seconds stops the
+  feed.
 
 **Webhooks**
 

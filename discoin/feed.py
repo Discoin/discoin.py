@@ -4,9 +4,11 @@ import logging
 
 import aiohttp
 
-from .classes import EventType, TransactionEvent
+from .classes import TransactionEvent
 from .errors import BadRequest, InternalServerError, RateLimited, WebTimeoutError
 
+HANDLER_PREFIX = "on_"
+EVERY_EVENT_HANDLER_NAME = "on_event"
 POLL_INTERVAL_SECONDS = 2
 FULL_BATCH_SIZE = 100
 BACKOFF_START_SECONDS = 1
@@ -23,11 +25,10 @@ class _FeedRefused(Exception):
 
 
 class EventFeed():
-    def __init__(self, fetch_event_objs, acknowledge_events):
+    def __init__(self, handler_owner, fetch_event_objs, acknowledge_events):
+        self._handler_owner = handler_owner
         self._fetch_event_objs = fetch_event_objs
         self._acknowledge_events = acknowledge_events
-        self._registrations = []
-        self._has_listeners = None
         self._task = None
         self.error = None
 
@@ -35,32 +36,16 @@ class EventFeed():
     def running(self):
         return self._task is not None and not self._task.done()
 
-    def add_listener(self, callback, event):
-        if not inspect.iscoroutinefunction(callback):
-            raise TypeError(f"{callback!r} is not a coroutine function")
-
-        if event is not EventType.ALL and not isinstance(event, str):
-            raise TypeError(f"{event!r} is not an event name or EventType.ALL")
-
-        self._registrations.append((event, callback))
-        self._signal_listeners()
-
-    def remove_listener(self, callback, event):
-        registration = (event, callback)
-        if registration not in self._registrations:
-            raise ValueError(f"{callback!r} is not registered for {event!r}")
-
-        self._registrations.remove(registration)
-        self._signal_listeners()
-
     async def start(self):
         if self.running:
             return
 
+        handler_names = self._find_handler_names()
+        self._require_coroutine_functions(handler_names)
         self.error = None
-        self._has_listeners = asyncio.Event()
-        self._signal_listeners()
-        self._task = asyncio.ensure_future(self._run())
+
+        if handler_names:
+            self._task = asyncio.ensure_future(self._run())
 
     async def stop(self):
         if self._task is None:
@@ -69,14 +54,13 @@ class EventFeed():
         self._task.cancel()
         await asyncio.wait([self._task])
 
-    def _signal_listeners(self):
-        if self._has_listeners is None:
-            return
+    def _find_handler_names(self):
+        return [name for name in dir(self._handler_owner) if name.startswith(HANDLER_PREFIX)]
 
-        if self._registrations:
-            self._has_listeners.set()
-        else:
-            self._has_listeners.clear()
+    def _require_coroutine_functions(self, handler_names):
+        for handler_name in handler_names:
+            if not inspect.iscoroutinefunction(getattr(self._handler_owner, handler_name)):
+                raise TypeError(f"{handler_name} of {type(self._handler_owner).__name__} is not a coroutine function")
 
     async def _run(self):
         try:
@@ -101,7 +85,6 @@ class EventFeed():
 
     async def _deliver_forever(self):
         while True:
-            await self._has_listeners.wait()
             event_objs = await self._request(self._fetch_event_objs)
             await self._deliver_batch(event_objs)
 
@@ -120,7 +103,7 @@ class EventFeed():
                 raise
             except Exception as error:
                 self._report_failure(error)
-                await self._acknowledge_up_to(last_handled_id)
+                await self._acknowledge_before_failure(last_handled_id)
 
                 raise
 
@@ -128,10 +111,26 @@ class EventFeed():
 
         await self._acknowledge_up_to(last_handled_id)
 
+    async def _acknowledge_before_failure(self, event_id):
+        try:
+            await self._acknowledge_up_to(event_id)
+        # CancelledError is an Exception before Python 3.8, and a refusal is logged where the feed stops
+        except (asyncio.CancelledError, _FeedRefused):
+            raise
+        except Exception as error:
+            logger.error("Acknowledging the events handled before the failure also failed.", exc_info=error)
+
     async def _dispatch(self, event):
-        callbacks = [callback for key, callback in self._registrations if key in (event.event, EventType.ALL)]
-        for callback in callbacks:
-            await callback(event)
+        named_handler_name = HANDLER_PREFIX + event.event.replace(".", "_")
+        await self._call_handler(named_handler_name, event)
+
+        if named_handler_name != EVERY_EVENT_HANDLER_NAME:
+            await self._call_handler(EVERY_EVENT_HANDLER_NAME, event)
+
+    async def _call_handler(self, handler_name, event):
+        handler = getattr(self._handler_owner, handler_name, None)
+        if handler is not None:
+            await handler(event)
 
     async def _acknowledge_up_to(self, event_id):
         if event_id is None:

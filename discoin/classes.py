@@ -35,7 +35,7 @@ class TransactionStatus(str, Enum):
     """
     The status of a transaction. Members compare equal to the API's status strings, e.g. ``TransactionStatus.COMPLETED == "Completed"``
 
-    ``CANCELLED`` and ``REVERSED`` are only set by the API, when a currency is removed or deactivated or a user is blocked, never by a bot
+    A bot never sets ``CANCELLED`` or ``REVERSED``. ``CANCELLED`` is set on pending transactions when an admin deactivates or removes a currency, when an admin removes a bot, or when the bot owner or an admin blocks the user. ``REVERSED`` is set on completed transactions only when the bot owner or an admin blocks a user and chooses to reverse their past transactions
     """
 
     PENDING = "Pending"
@@ -102,26 +102,20 @@ class FeedTransaction(_TransactionFields):
     """
 
 
-class _AllEvents():
-    def __repr__(self):
-        return "EventType.ALL"
-
-
 class EventType():
     """
-    The event names the API sends today, and the catch-all key for `Client.listen` and `Client.add_listener`.
+    The event names the API sends today.
     `TransactionEvent.event` is always a plain string, so a name that is not listed here passes through unchanged
 
     ``CREATED`` is ``"transaction.created"``, ``CANCELLED`` is ``"transaction.cancelled"``, ``REVERSED`` is ``"transaction.reversed"`` and ``TEST`` is ``"transaction.test"``
 
-    ``ALL`` is not a string and equals no event name. A handler registered under it receives every event, listed here or not
+    The event feed calls the method of a `Client` subclass named after the event, e.g. `on_transaction_created` for ``CREATED``. See `Client.start`
     """
 
     CREATED = "transaction.created"
     CANCELLED = "transaction.cancelled"
     REVERSED = "transaction.reversed"
     TEST = "transaction.test"
-    ALL = _AllEvents()
 
 
 class TriggerKind():

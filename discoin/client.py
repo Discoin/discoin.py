@@ -23,12 +23,12 @@ class Client():
         self._headers = {"Authorization": f"Bearer {token}"}
         self._me = me
         self._session = None
-        self._feed = EventFeed(self._fetch_event_objs, self.acknowledge_events)
+        self._feed = EventFeed(self, self._fetch_event_objs, self.acknowledge_events)
 
     @property
     def events_running(self):
         """
-        (``bool``) If the event feed started by `start` is running. It is ``True`` while the feed waits for its first handler
+        (``bool``) If the event feed started by `start` is running. It stays ``False`` after `start` on a client that defines no handler method
         """
 
         return self._feed.running
@@ -48,62 +48,31 @@ class Client():
         A client that is never started makes no events request.
 
         The feed reads the bot's events about every 2 seconds, and at once after a full batch of 100.
-        It awaits the handlers registered with `listen` or `add_listener` one event at a time, in ascending ID order.
-        After the handlers of a whole batch returned, it acknowledges the highest ID of the batch, events without a matching handler included.
-        It makes no request while no handler is registered.
+        It awaits the handler methods of a `Client` subclass one event at a time, in ascending ID order.
+        After the handlers of a whole batch returned, it acknowledges the highest ID of the batch, events without a handler included.
+
+        A handler is a coroutine method that gets one argument, the `discoin.TransactionEvent`. Its name is ``on_`` followed by
+        the event name with every ``.`` replaced by ``_``, so ``transaction.created`` calls `on_transaction_created`.
+        `on_event`, if defined, gets every event, after the named handler of that event. `Client` itself defines no handler.
+        An event name that has a character a method name cannot have, other than the ``.``, has no named handler and only reaches `on_event`.
+        An event named ``event`` calls `on_event` once.
+
+        `start` reads every attribute of the client whose name starts with ``on_`` as a handler, and checks them when it is called.
+        On a client that has none, it starts no feed and makes no events request, and `events_running` stays ``False``.
 
         The feed stops when a handler raises or an event cannot be parsed. It acknowledges the events handled before that one,
         logs the error once and keeps it in `events_error`. The API sends the other events again after the next `start`.
         A 4** other than a 429 stops it the same way. A 429 is waited out for the seconds of its `Retry-After` header,
         and a 5**, a timeout or a network error is retried with a growing wait, up to 60 seconds.
+        A 429 without a `Retry-After` header in whole seconds stops the feed.
 
         If the bot has a webhook URL, the API returns a 409 on the events routes. The feed then logs one warning and stops.
         It does not raise and does not retry, and `events_error` holds the 409.
+
+        :raises TypeError: If an attribute of the client whose name starts with ``on_`` is not a coroutine function. The feed is then not started and `events_error` is not cleared
         """
 
         await self._feed.start()
-
-    def listen(self, event):
-        """
-        A decorator that registers a coroutine function as a handler of the event feed. It returns the function unchanged
-
-        :param event: (``str``) The event name to handle, e.g. `discoin.EventType.CREATED`, or `discoin.EventType.ALL` to handle every event
-
-        :raises TypeError: If the decorated function is not a coroutine function, or if `event` is neither a string nor `discoin.EventType.ALL`
-        """
-
-        def register(callback):
-            self.add_listener(callback, event)
-
-            return callback
-
-        return register
-
-    def add_listener(self, callback, event):
-        """
-        Register a handler of the event feed. The handler is awaited with one argument, the `discoin.TransactionEvent`.
-        The handlers of one event run one at a time, in the order they were registered. A handler registered twice is called twice.
-        A handler registered while an event is being handled is called from the next event
-
-        :param callback: The coroutine function to call
-        :param event: (``str``) The event name to handle, e.g. `discoin.EventType.CREATED`, or `discoin.EventType.ALL` to handle every event
-
-        :raises TypeError: If `callback` is not a coroutine function, or if `event` is neither a string nor `discoin.EventType.ALL`
-        """
-
-        self._feed.add_listener(callback, event)
-
-    def remove_listener(self, callback, event):
-        """
-        Remove a handler of the event feed. If it was registered several times for `event`, the earliest registration is removed
-
-        :param callback: The registered coroutine function
-        :param event: (``str``) The event name, or `discoin.EventType.ALL`, the handler was registered for
-
-        :raises ValueError: If `callback` is not registered for `event`
-        """
-
-        self._feed.remove_listener(callback, event)
 
     async def close(self):
         """
