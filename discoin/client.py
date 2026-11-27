@@ -1,10 +1,13 @@
 import aiohttp
+import logging
 from urllib.parse import quote, urlencode
 
 from .classes import Transaction, Currency, TransactionStatus, TransactionEvent
 from .feed import EventFeed
 from .retry import DEFAULT_MAX_RETRIES, is_retryable, never_reached_api, with_backoff
 from .utils import send_request
+
+logger = logging.getLogger(__name__)
 
 
 class Client():
@@ -22,7 +25,7 @@ class Client():
 
         :param token: (``str``) Your api token for discoin 
         :param me: (``str``) (Optional) Your 3 letter currency code, the default `code_from` of `create_transaction` and `fetch_quote`. Leave it out if your bot runs several currencies
-        :param max_retries: (``int``) (Optional) The most retries of a request, after which its last error is raised. Default is 8, so a request gives up after the retry that follows the first 128 second wait. ``None`` retries until the request succeeds. It also applies to the requests of the event feed
+        :param max_retries: (``int``) (Optional) The most retries of a request, after which its last error is raised. Default is 8, so a request gives up after the retry that follows the first 128 second wait. ``None`` retries until the request succeeds. It also applies to the claims and reports of the event feed, and not to the marks the feed sends
         """
 
         # Needed vars
@@ -30,7 +33,7 @@ class Client():
         self._me = me
         self._max_retries = max_retries
         self._session = None
-        self._feed = EventFeed(self, self._fetch_event_objs, self.acknowledge_events)
+        self._feed = EventFeed(self)
 
     @property
     def events_running(self):
@@ -54,26 +57,46 @@ class Client():
         Calling it while the feed is running does nothing. After a stop it starts the feed again and clears `events_error`.
         A client that is never started makes no events request.
 
-        The feed reads the bot's events about every 2 seconds, and at once after a full batch of 100.
-        It awaits the handler methods of a `Client` subclass one event at a time, in ascending ID order.
-        After the handlers of a whole batch returned, it acknowledges the highest ID of the batch, events without a handler included.
+        The feed claims the bot's due events about every 2 seconds, and at once after a full batch of 100.
+        It handles one event at a time, in ascending ID order: it awaits the handler, marks the transaction if the handler asked for it,
+        then reports the event to the API as handled or unhandled. It claims the next batch after every event of the batch was reported.
 
-        A handler is a coroutine method that gets one argument, the `discoin.TransactionEvent`. Its name is ``on_`` followed by
-        the event name with every ``.`` replaced by ``_``, so ``transaction.created`` calls `on_transaction_created`.
-        `on_event`, if defined, gets every event, after the named handler of that event. `Client` itself defines no handler.
-        An event name that has a character a method name cannot have, other than the ``.``, has no named handler and only reaches `on_event`.
-        An event named ``event`` calls `on_event` once.
+        A handler is a coroutine method that gets one argument, the `discoin.TransactionEvent`, and returns a `discoin.EventStatus`.
+        Its name is ``on_`` followed by the event name with every ``.`` replaced by ``_``, so ``transaction.created`` calls `on_transaction_created`.
+        `on_event`, if defined, gets the events that have no named handler, and its return value is used the same way.
+        An event that has neither is reported handled. `Client` itself defines no handler.
+        An event name that has a character a method name cannot have, other than the ``.``, has no named handler and reaches `on_event`.
+        So does an event named ``error``, since `on_error` is not a handler.
 
-        `start` reads every attribute of the client whose name starts with ``on_`` as a handler, and checks them when it is called.
+        ``EventStatus.COMPLETED`` makes the feed mark the transaction of the event `Completed` and report the event handled.
+        ``EventStatus.REFUNDED`` does the same with `Refunded`. The feed sends that mark itself, under the rules below,
+        and does not call `mark_completed` or `mark_refunded`. ``EventStatus.HANDLED`` reports the event handled and marks nothing.
+        ``EventStatus.UNHANDLED`` reports it unhandled, and the API sends it again after a wait.
+        The feed does not check the transaction before it calls a handler. When `attempt` of the event is above 1,
+        an earlier try may already have run the handler and marked the transaction.
+
+        The feed sends a mark up to 3 times, 1 second apart, on a 5**, a timeout or a network error, without the retries of `max_retries`.
+        A 400 on the mark means the transaction is no longer `Pending`, and a 404 that it does not exist, which includes the transaction
+        of a test event that expired. For both, `on_error` gets the `discoin.BadRequest` and the event is reported handled.
+        A 429 on the mark that has a `Retry-After` header in whole seconds is waited out for those seconds, then the mark is sent again,
+        as one of its 3 tries. A 429 without one is not retried.
+        Any other mark that fails goes to `on_error`, and the event is reported unhandled.
+
+        `on_error` is also called when a handler raises or returns anything that is not a `discoin.EventStatus`, ``None`` included,
+        and when an event cannot be parsed. Those events are reported unhandled. A report the API answers with a 4** other than a 429
+        goes to `on_error` too. The feed keeps running after each of them.
+
+        `start` reads every attribute of the client whose name starts with ``on_``, other than `on_error`, as a handler, and checks them when it is called.
         On a client that has none, it starts no feed and makes no events request, and `events_running` stays ``False``.
 
-        The feed stops when a handler raises or an event cannot be parsed. It acknowledges the events handled before that one,
-        logs the error once and keeps it in `events_error`. The API sends the other events again after the next `start`.
-        A 4** other than a 429 stops it the same way. A 429 is waited out for the seconds of its `Retry-After` header,
-        and a 429 without one, a 5**, a timeout or a network error is retried with a wait that doubles up to 128 seconds.
-        When a request still fails after `max_retries` retries, the feed stops the same way as for a 4**.
+        The claim and the report are retried like every other request of the client. The feed stops when one of them
+        still fails after `max_retries` retries, and when the claim is answered with a 4** other than a 429.
+        A claim answered with a body that has no ``events``, or with an event that has no ``id``, stops it too, since such an event cannot be reported.
+        The feed logs the error once with the ``discoin.feed`` logger and keeps it in `events_error`.
+        An event that has an ``id`` and cannot be parsed otherwise, for example for an ``attempt`` that is not an ``int`` or a ``test`` that is not a ``bool``,
+        does not stop the feed: `on_error` gets the error with ``None`` as the event, and the event is reported unhandled.
 
-        If the bot has a webhook URL, the API returns a 409 on the events routes. The feed then logs one warning and stops.
+        If the bot has a webhook URL, the API returns a 409 on the events routes. On a 409 for the claim the feed logs one warning and stops.
         It does not raise and does not retry, and `events_error` holds the 409.
 
         :raises TypeError: If an attribute of the client whose name starts with ``on_`` is not a coroutine function. The feed is then not started and `events_error` is not cleared
@@ -81,10 +104,30 @@ class Client():
 
         await self._feed.start()
 
+    async def on_error(self, error, event):
+        """
+        Called by the event feed with an error that did not stop it. Override it in a `Client` subclass to handle these errors yourself.
+        It is a coroutine method. As written here, it logs the error with its traceback with the ``discoin.client`` logger.
+        If it raises, the feed logs that error with the ``discoin.feed`` logger and keeps running.
+
+        It is called when a handler raises, when a handler returns anything that is not a `discoin.EventStatus`,
+        when the mark asked by ``EventStatus.COMPLETED`` or ``EventStatus.REFUNDED`` fails, when an event cannot be parsed,
+        and when the API answers the report of an event with a 4** other than a 429. See `start` for what is reported in each case
+
+        :param error: (``Exception``) The error
+        :param event: (``discoin.TransactionEvent``) The event the error is about. ``None`` if the event could not be parsed
+        """
+
+        logger.error("The event feed failed on %s.", "an event that could not be parsed" if event is None else event, exc_info=error)
+
     async def close(self):
         """
         Stop the event feed, if it was started, then close the aiohttp session, if one was opened. A later request opens a new session.
-        A handler that is running is cancelled, and its event is not acknowledged
+        A handler that is running is cancelled, and its event is not reported. The API sends it again once its lease and wait are over.
+
+        Called from inside a handler or `on_error`, it cancels nothing: the session is closed, and the handler or `on_error` runs on to its end.
+        The feed then stops without another request, so the event it was on is neither marked nor reported,
+        and nothing is logged or put in `events_error`
         """
 
         await self._feed.stop()
@@ -171,44 +214,51 @@ class Client():
 
         await self._request("PUT", f"/transactions/{transaction_id}/handled", headers=self._headers)
 
-    async def fetch_events(self, after: int = None, limit: int = None):
+    async def claim_events(self, limit: int = None):
         """
-        Get a list of your bot's events from the event feed, in ascending ID order. It does not need `start`
+        Claim your bot's due events from the event feed, in ascending ID order. It does not need `start`.
+        The API leases each claimed event for 2 minutes and counts the claim as a try, so `attempt` of each event is 1 on its first claim.
+        An event that is not reported with `report_event` is due again once its lease and the wait of that try are over.
 
-        :param after: (``int``) (Optional) Only fetch events with an ID above this one. Leave it out to start after the last acknowledged event. Giving it does not move the acknowledged position
-        :param limit: (``int``) (Optional) The most events to return, from 1 to 100. Leave it out for the API's default of 100
+        The claim is retried like any other request. When the answer to a claim is lost, the events of that claim stay leased,
+        and the API sends them again after the lease and the wait, with `attempt` one higher
+
+        :param limit: (``int``) (Optional) The most events to claim, from 1 to 100. Leave it out for the API's default of 100
 
         :rtype: [discoin.TransactionEvent]
 
         :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
-        :raises discoin.BadRequest: If the discoin API returns a 4**. A 409 if your bot has a webhook URL, a 422 if `after` or `limit` is not accepted
+        :raises discoin.BadRequest: If the discoin API returns a 4**. A 409 if your bot has a webhook URL, a 422 if `limit` is not accepted
         :raises discoin.RateLimited: If the discoin API returns a 429 on every attempt `max_retries` allows
         :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
-        event_objs = await self._fetch_event_objs(after=after, limit=limit)
+        event_objs = await self._claim_event_objs(limit)
 
         return [TransactionEvent(event_obj) for event_obj in event_objs]
 
-    async def acknowledge_events(self, event_id: int):
+    async def report_event(self, event_id: int, handled: bool):
         """
-        Acknowledge every event of the event feed up to and including `event_id`, so the API stops sending them. It does not need `start`.
-        Acknowledging an ID at or below the last acknowledged one changes nothing and raises no error.
-        Acknowledging the ID of an event the API already deleted works, as long as it is not above your bot's newest event
+        Report a claimed event of the event feed as handled or unhandled. It does not need `start`.
+        A handled event is final, and reporting it handled again changes nothing and raises no error.
+        An unhandled event is due again after a wait that starts at 1 minute and doubles. After 8 unhandled tries the event is dead and the API sends it no more.
+        The 2 minute lease does not limit the report. A handled report is accepted whatever became of the event, also when it is already handled or dead.
+        An unhandled report is answered with a 409 once the event is handled or dead
 
-        :param event_id: (``int``) The ID of the newest event to acknowledge
+        :param event_id: (``int``) The ID of the event
+        :param handled: (``bool``) ``True`` to report the event handled, ``False`` to report it unhandled
 
         :raises discoin.InternalServerError: If the discoin API returns a 5** on every attempt `max_retries` allows
-        :raises discoin.BadRequest: If the discoin API returns a 4**. A 400 with the field `id` if `event_id` is above your bot's newest event, a 409 if your bot has a webhook URL
+        :raises discoin.BadRequest: If the discoin API returns a 4**. A 404 if the event does not exist, belongs to another bot or was deleted, a 409 if it was never claimed, if it is reported unhandled after it was handled or died, or if your bot has a webhook URL
         :raises discoin.RateLimited: If the discoin API returns a 429 on every attempt `max_retries` allows
         :raises discoin.WebTimeoutError: If the API times out on every attempt `max_retries` allows
         """
 
         json = {
-            "id": event_id,
+            "handled": handled,
         }
 
-        await self._request("POST", "/events/ack", headers=self._headers, json=json)
+        await self._request("POST", f"/events/{event_id}/result", headers=self._headers, json=json)
 
     async def create_transaction(self, code_to: str, amount: float, user_id: int, code_from: str = None):
         """
@@ -332,21 +382,27 @@ class Client():
 
         return [Transaction(transaction_obj) for transaction_obj in api_response_json]
 
-    async def _fetch_event_objs(self, **query):
-        api_response = await self._request("GET", _with_query("/events", **query), headers=self._headers)
+    async def _claim_event_objs(self, limit: int = None):
+        api_response = await self._request("POST", _with_query("/events/claim", limit=limit), headers=self._headers)
         api_response_json = await api_response.json()
 
         return api_response_json['events']
 
+    async def _mark_once(self, transaction_id: str, status: TransactionStatus):
+        await self._send_transaction_status(transaction_id, status, should_retry=_never_retry)
+
     async def _update_transaction_status(self, transaction_id: str, status: TransactionStatus):
+        api_response = await self._send_transaction_status(transaction_id, status, should_retry=is_retryable)
+        api_response_json = await api_response.json()
+
+        return Transaction(api_response_json)
+
+    async def _send_transaction_status(self, transaction_id: str, status: TransactionStatus, should_retry):
         json = {
             "status": status.value,
         }
 
-        api_response = await self._request("PATCH", f"/transactions/{transaction_id}", headers=self._headers, json=json)
-        api_response_json = await api_response.json()
-
-        return Transaction(api_response_json)
+        return await self._request("PATCH", f"/transactions/{transaction_id}", headers=self._headers, json=json, should_retry=should_retry)
 
     async def _fetch_route_currency_ids(self, code_to: str, code_from: str):
         from_currency_id = await self._fetch_currency_id(self._resolve_code_from(code_from))
@@ -382,6 +438,10 @@ class Client():
         api_response_json = await api_response.json()
 
         return api_response_json['id']
+
+
+def _never_retry(error):
+    return False
 
 
 def _with_query(url_path: str, **parameters):

@@ -2,20 +2,25 @@
 import discord
 
 from discord.ext import commands, tasks
-from discoin import BadRequest, Client, InternalServerError, WebTimeoutError
+from discoin import Client, EventStatus, InternalServerError, WebTimeoutError
 
-class DiscoinClient(Client): # The event feed calls the `on_...` methods of this class, named after the event: `transaction.created` calls `on_transaction_created`
+# The event feed calls the `on_...` methods of this class, named after the event: `transaction.created` calls `on_transaction_created`
+class DiscoinClient(Client):
     def __init__(self, bot):
-        super().__init__(token="XXXXXXXXXXXXXXX", me="{YOUR CURRENCY CODE}") # Initializes Discoin
+        # Initializes Discoin
+        super().__init__(token="XXXXXXXXXXXXXXX", me="{YOUR CURRENCY CODE}")
         self.bot = bot
 
     async def on_transaction_created(self, event):
         """
         Called when a transaction is sent to your currency.
         Only the bot that runs the currency a transaction goes to gets events, the sending bot gets none.
+        What it returns tells the feed what to do with the event, see `EventStatus`.
 
         `event.id` = The ID of the event (`int`)
         `event.event` = The name of the event, here `"transaction.created"` (`str`)
+        `event.attempt` = How many times the API has sent the event, this time included. Above 1, an earlier try may already have paid the user (`int`)
+        `event.test` = If the event was sent by the Test button of the bot owner page (`bool`)
         `event.triggered_by` = Who caused the event, or `None`. Only events caused by a block have it (`EventTrigger`)
         `event.transaction` = The transaction as it was when the event was written (`FeedTransaction`)
 
@@ -31,20 +36,27 @@ class DiscoinClient(Client): # The event feed calls the `on_...` methods of this
         """
         transaction = event.transaction
 
-        try:
-            await self.mark_completed(transaction.id) # Marking the transaction as completed, before the balance, so that a transaction is only paid once
-        except BadRequest as error:
-            if error.status != 400: raise # Any other error raises, which stops the feed. See `events_error`
-
-            return # A 400 means the transaction is no longer `Pending`. An event can be delivered more than once, and the owner can resend a transaction from the dashboard
+        if event.test:
+            # A test event pays nobody. The feed marks its transaction as completed, which passes the test of the bot owner page
+            return EventStatus.COMPLETED
 
         # WARNING! At this point, you will have to add `transaction.payout` into the user's balance.
+        # The API sends an event again when an earlier try was not reported handled, so `event.attempt` can be above 1 here.
+        # Keeping the IDs of the transactions you paid is what stops a second payout.
+        #
+        # When your bot can't pay right now, `return EventStatus.UNHANDLED` here and the API sends the event again after a wait.
 
         try:
-            user = await self.bot.fetch_user(transaction.user_id) # `get_user` reads the cache, which is empty until the bot is ready, and the feed starts in `cog_load`, before that
-            await user.send(f"Your transfer has just been processed! \n`${transaction.payout}` has been added to your account. \nHere is your receipt: `{transaction.id}`") # Notify the user that their transaction went through
+            # `get_user` reads the cache, which is empty until the bot is ready, and the feed starts in `cog_load`, before that
+            user = await self.bot.fetch_user(transaction.user_id)
+            # Notify the user that their transaction went through
+            await user.send(f"Your transfer has just been processed! \n`${transaction.payout}` has been added to your account. \nHere is your receipt: `{transaction.id}`")
         except discord.HTTPException as error:
-            print(f"Could not notify user {transaction.user_id} of transaction {transaction.id}: {error}") # A user with closed DMs makes `send` raise, and a handler that raises stops the feed
+            # A user with closed DMs makes `send` raise, and a handler that raises has its event sent again
+            print(f"Could not notify user {transaction.user_id} of transaction {transaction.id}: {error}")
+
+        # The feed marks the transaction as completed, then reports the event handled. `EventStatus.REFUNDED` marks it as refunded instead
+        return EventStatus.COMPLETED
 
     async def on_transaction_cancelled(self, event):
         """
@@ -64,6 +76,9 @@ class DiscoinClient(Client): # The event feed calls the `on_...` methods of this
 
         print(f"Transaction {transaction.id} of user {transaction.user_id} was cancelled")
 
+        # The feed reports the event handled and marks nothing
+        return EventStatus.HANDLED
+
     async def on_transaction_reversed(self, event):
         """
         Called when a `Completed` transaction to your currency is reversed.
@@ -82,31 +97,44 @@ class DiscoinClient(Client): # The event feed calls the `on_...` methods of this
 
         print(f"Transaction {transaction.id} of user {transaction.user_id} was reversed")
 
-    async def on_transaction_test(self, event):
+        return EventStatus.HANDLED
+
+    async def on_error(self, error, event):
         """
-        Called when the Test button of the bot owner page is pressed. Its transaction exists nowhere else,
-        so `mark_completed` and `mark_refunded` on it raise a 404.
+        Called with an error of the event feed that did not stop it: a handler that raised or returned no `EventStatus`,
+        a mark that failed, a report the API refused, or an event that could not be parsed.
+        Without this method, the library logs the error with the `discoin.client` logger.
+
+        `error` = The error (`Exception`)
+        `event` = The event the error is about, or `None` if it could not be parsed (`TransactionEvent`)
         """
-        print(f"Test event {event.id} received, the event feed works")
+        print(f"The Discoin event feed failed on {event}: {error!r}")
 
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.discoin_client = DiscoinClient(bot) # Initializes Discoin with the event handlers above
+        # Initializes Discoin with the event handlers above
+        self.discoin_client = DiscoinClient(bot)
 
-        self.discoin_undone_update.add_exception_type(InternalServerError, WebTimeoutError) # The task retries these with a growing wait instead of stopping
+        # The task retries these with a growing wait instead of stopping
+        self.discoin_undone_update.add_exception_type(InternalServerError, WebTimeoutError)
 
     async def cog_load(self):
-        await self.discoin_client.start() # Starts the event feed. It returns at once and the feed runs in the background
-        self.discoin_undone_update.start() # Starts the background task for undone transactions
+        # Starts the event feed. It returns at once and the feed runs in the background
+        await self.discoin_client.start()
+        # Starts the background task for undone transactions
+        self.discoin_undone_update.start()
 
     async def cog_unload(self):
         self.discoin_undone_update.cancel()
-        await self.discoin_client.close() # Closes the session and stops the event feed
+        # Closes the session and stops the event feed
+        await self.discoin_client.close()
 
-    @tasks.loop(minutes=5.0) # A background task that runs every 5 minutes
+    # A background task that runs every 5 minutes
+    @tasks.loop(minutes=5.0)
     async def discoin_undone_update(self):
-        undone_transactions = await self.discoin_client.fetch_undone_transactions() # Grabs up to 50 refunded, cancelled and reversed transactions your bot has not marked handled, the rest come on a later run
+        # Grabs up to 50 refunded, cancelled and reversed transactions your bot has not marked handled, the rest come on a later run
+        undone_transactions = await self.discoin_client.fetch_undone_transactions()
         for transaction in undone_transactions:
             # This list has the transactions your bot sent and those it received. It is the only place where
             # a sending bot sees that a transaction it sent was refunded, cancelled or reversed.
@@ -125,14 +153,20 @@ class Economy(commands.Cog):
             # `payout` = The amount calculated to its final destination (`float`)
             #
             # At this point, what your bot does about the transaction is your choice.
-            await self.discoin_client.mark_handled(transaction.id) # Takes the transaction off the list. Until then, it is listed on every call
+
+            # Takes the transaction off the list. Until then, it is listed on every call
+            await self.discoin_client.mark_handled(transaction.id)
 
     @commands.group(invoke_without_command=True)
     async def transfer(self, ctx, amount: float, to: str):
         """Transfer currency to another bot that supports discoin"""
         # At this point, make sure the user has enough balance
-        transaction = await self.discoin_client.create_transaction(to, amount, ctx.author.id) # Make the transaction. The currency code can be in any case
-        # Remove {amount} from the user's balance
+
+        # Make the transaction. The currency code can be in any case
+        transaction = await self.discoin_client.create_transaction(to, amount, ctx.author.id)
+
+        # At this point, remove {amount} from the user's balance
+
         await ctx.send(f"Your transfer to {transaction.currency_to.name} (`{transaction.currency_to.abbreviation}`) is on its way! \nYou will be getting `{transaction.payout} {transaction.currency_to.abbreviation}` \nHere is your receipt: `{transaction.id}`")
 
     @transfer.command()
@@ -154,7 +188,8 @@ class Economy(commands.Cog):
 
             return
 
-        error = self.discoin_client.events_error # A handler that raises, an event that cannot be parsed, a 4** other than a 429, or a webhook URL on the bot (a 409) stops the feed
+        # A webhook URL on the bot (a 409), another 4** on the claim, or a claim or report that still fails after `max_retries` retries stops the feed. A handler that raises does not
+        error = self.discoin_client.events_error
         if error is None:
             await ctx.send("The Discoin event feed is stopped")
 
@@ -170,7 +205,8 @@ class Economy(commands.Cog):
 
             return
 
-        await self.discoin_client.start() # Clears `events_error`. The API sends the events that were not acknowledged again
+        # Clears `events_error`. The API sends the events that were not reported again, once their lease and wait are over
+        await self.discoin_client.start()
         await ctx.send("The Discoin event feed was started again")
 
 async def setup(bot):

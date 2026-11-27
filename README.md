@@ -14,7 +14,7 @@ $ pip install discoin
 Documentation can be found [here](https://discoinpy.readthedocs.io)
 
 ## Events and undone transactions
-`Client.start()` reads your bot's event feed in the background and calls the handler methods of your `Client` subclass, such as `on_transaction_created`. `Client.fetch_undone_transactions()` lists the refunded, cancelled and reversed transactions your bot has not marked handled, and `Client.mark_handled()` marks one. Both are described in the [getting started guide](https://discoinpy.readthedocs.io/en/latest/getting_started.html).
+`Client.start()` reads your bot's event feed in the background and calls the handler methods of your `Client` subclass, such as `on_transaction_created`. A handler returns an `EventStatus`, which tells the feed whether to mark the transaction and whether to report the event to the API as handled or unhandled. The API sends an unhandled event again after a wait. `Client.fetch_undone_transactions()` lists the refunded, cancelled and reversed transactions your bot has not marked handled, and `Client.mark_handled()` marks one. Both are described in the [getting started guide](https://discoinpy.readthedocs.io/en/latest/getting_started.html).
 
 ## Credits
 * [Dr_Ari_Gami](https://github.com/Dr-Ari-Gami/) (Main Developer)

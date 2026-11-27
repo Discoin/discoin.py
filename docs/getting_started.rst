@@ -73,15 +73,18 @@ Events
 ------
 
 The API keeps a feed of events for each bot. *discoin.py* can read it in
-the background and call the handler methods of a ``Client`` subclass
+the background, call the handler methods of a ``Client`` subclass and
+tell the API what became of each event
 
 .. code:: py
 
-    from discoin import Client
+    from discoin import Client, EventStatus
 
     class MyClient(Client):
         async def on_transaction_created(self, event):
             print(event.id, event.event, event.transaction.payout)
+
+            return EventStatus.COMPLETED
 
     client = MyClient("<TOKEN>", "ABC")
 
@@ -95,29 +98,67 @@ handlers on it is allowed, and nothing is called.
 **Handlers**
 
 - A handler is a coroutine method of a ``Client`` subclass that gets
-  one argument, the ``TransactionEvent``.
+  one argument, the ``TransactionEvent``, and returns an
+  ``EventStatus``.
 - The method name is ``on_`` followed by the event name, with every
   ``.`` replaced by ``_``. ``transaction.created`` calls
   ``on_transaction_created``, ``transaction.cancelled`` calls
-  ``on_transaction_cancelled``, ``transaction.reversed`` calls
-  ``on_transaction_reversed`` and ``transaction.test`` calls
-  ``on_transaction_test``. An event name the API adds later calls the
-  method named the same way.
-- ``on_event`` gets every event.
+  ``on_transaction_cancelled`` and ``transaction.reversed`` calls
+  ``on_transaction_reversed``. An event name the API adds later calls
+  the method named the same way.
+- ``on_event`` gets the events that have no named handler. Its return
+  value is used like that of a named handler.
+- An event that has neither a named handler nor ``on_event`` is
+  reported handled. A bot that only defines ``on_transaction_created``
+  does not see its cancelled or reversed events again.
 - An event name with a character that a method name cannot have, other
-  than the ``.``, has no named handler and only reaches ``on_event``.
+  than the ``.``, has no named handler and reaches ``on_event``. So
+  does an event named ``error``, since ``on_error`` is not a handler.
 - ``Client`` itself defines no handler. A plain ``Client`` works for
   every other call.
 - ``start()`` takes every attribute of the client whose name starts
-  with ``on_`` as a handler. It raises a ``TypeError`` if one of them
-  is not a coroutine function. On a client that has none, it starts no
-  feed and ``client.events_running`` stays ``False``.
-- Handlers run one at a time, the named handler first, then
-  ``on_event``. The next event waits until every handler of the
-  current one returned, so a slow handler delays the reads.
+  with ``on_``, other than ``on_error``, as a handler. It raises a
+  ``TypeError`` if one of them, or ``on_error``, is not a coroutine
+  function. On a client that has no handler, it starts no feed and
+  ``client.events_running`` stays ``False``.
+- Events are handled one at a time, in ascending ID order. The next
+  event waits until the current one was reported, so a slow handler
+  delays the events after it.
 - ``event.event`` and ``event.triggered_by.kind`` are plain strings.
   ``EventType`` and ``TriggerKind`` list the values the API sends today,
   and other values can appear later.
+
+**What a handler returns**
+
+=========================  ===================================================
+Return value               What the feed does
+=========================  ===================================================
+``EventStatus.COMPLETED``  marks the transaction of the event
+                           ``Completed``, then reports the event handled
+``EventStatus.REFUNDED``   marks the transaction of the event
+                           ``Refunded``, then reports the event handled
+``EventStatus.HANDLED``    reports the event handled and marks nothing
+``EventStatus.UNHANDLED``  reports the event unhandled, and the API sends
+                           it again after a wait
+=========================  ===================================================
+
+- Any other return value is an error, ``None`` included, so a handler
+  without a ``return`` has its events reported unhandled. ``on_error``
+  gets a ``TypeError``.
+- The feed sends the mark itself and does not call ``mark_completed``
+  or ``mark_refunded``, so overriding them does not change what the
+  feed does.
+- The feed sends the mark up to 3 times, 1 second apart, on a 5**, a
+  timeout or a network error. ``max_retries`` does not apply to it.
+- A 400 on the mark means the transaction is no longer ``Pending``,
+  and a 404 that it does not exist, which includes the transaction of
+  a test event that expired. For both, ``on_error`` gets the
+  ``BadRequest``, and the event is reported handled.
+- A 429 on the mark that has a ``Retry-After`` header in whole seconds
+  is waited out for those seconds, then the mark is sent again, as one
+  of its 3 tries. A 429 without one is not retried.
+- Any other mark that fails goes to ``on_error``, and the event is
+  reported unhandled.
 
 **What the API sends**
 
@@ -131,44 +172,106 @@ handlers on it is allowed, and nothing is called.
 - The transaction inside an event is a snapshot from when the event was
   written. It is a ``FeedTransaction``, which has the currency UUIDs
   but no currency labels, unlike ``Transaction``.
-- The Test button of the bot owner page writes a real event,
-  ``transaction.test``, with the next event ID. It is delivered to
-  handlers and acknowledged like any other event. Its transaction ID
-  exists nowhere else, both currency UUIDs are
-  ``00000000-0000-0000-0000-000000000000``, the amount is 100.0, the
-  payout is 10.0 and the status is ``Pending``. ``mark_completed`` and
-  ``mark_refunded`` on it raise a 404.
+- ``event.attempt`` counts how many times the API has handed the event
+  out, this time included. It is 1 on the first claim.
+- ``event.test`` is ``True`` on the event the Test button of the bot
+  owner page sends, and ``False`` on every other event. The test event
+  is a ``transaction.created`` with the next event ID, claimed and
+  reported like any other event. ``mark_completed`` and
+  ``mark_refunded`` on its transaction record the status and return
+  the transaction, and no real transaction changes.
 
-**Reading and acknowledging**
+**Claiming and reporting**
 
-- The feed reads about every 2 seconds, and at once after a full batch
-  of 100 events. A client that defines no handler makes no events
-  request.
-- After the handlers of a whole batch returned, the feed acknowledges
-  the highest event ID of the batch. The API sends acknowledged events
-  no more.
-- An event that has no handler is acknowledged with its batch all the
-  same. A bot that only defines ``on_transaction_created`` does not see
-  its cancelled or reversed events again.
-- Delivery is at least once. A bot that stops between handling an event
-  and acknowledging it gets that event again.
-- The API allows 300 requests a minute per token and answers a 429 with
-  a ``Retry-After`` header above that. The feed waits that long, then
-  continues.
-- The feed retries a 5**, a timeout, a network error and a 429 without
-  a ``Retry-After`` header, with a wait that starts at 1 second and
-  doubles up to 128 seconds. A request that still fails after
-  ``max_retries`` retries, 8 by default, stops the feed.
+- The feed claims the bot's due events about every 2 seconds, and at
+  once after a full batch of 100 events. A client that defines no
+  handler makes no events request.
+- The API leases a claimed event for 2 minutes. During the lease no
+  claim returns it.
+- After the handler of an event returned, and after the mark if there
+  is one, the feed reports the event to the API as handled or
+  unhandled. It claims the next batch after every event of the batch
+  was reported.
+- A handled event is final. The API sends it no more.
+- An unhandled event is due again after a wait that starts at 1 minute
+  and doubles. An event that is claimed and not reported is due again
+  once its lease and that wait are over, and counts as a try the same
+  way.
+- After 8 tries that were not reported handled, the event is dead. The
+  API sends a dead event no more.
+- The lease does not limit the report. A handled report is accepted
+  whatever became of the event, also when it is already handled or
+  dead. An unhandled report is answered with a 409 once the event is
+  handled or dead.
+- An event that is waiting does not hold back the events after it.
+  They are claimed and handled while it waits, so events are not
+  always handled in the order they were written.
+- Delivery is at least once. When ``event.attempt`` is above 1, an
+  earlier try may already have run the handler and marked the
+  transaction. A handler that pays the user pays twice in that case,
+  unless it recognises the transaction ID it already paid.
+- *discoin.py* does not check the transaction before it calls a
+  handler.
+- The claim is retried like every other request. When the answer to a
+  claim is lost, the events of that claim stay leased, and the API
+  sends them again after the lease and the wait, with ``attempt`` one
+  higher.
+- The API allows 1200 requests a minute per IP address, shared by
+  every bot on that address, and answers a 429 with a ``Retry-After``
+  header above that. The feed waits that long, then continues.
+- The claim and the report are retried on a 5**, a timeout, a network
+  error and a 429 without a ``Retry-After`` header, with a wait that
+  starts at 1 second and doubles up to 128 seconds.
+
+**Errors that do not stop the feed**
+
+``on_error(error, event)`` is a coroutine method of ``Client`` that a
+subclass can override. As it comes, it logs the error with its
+traceback with the ``discoin.client`` logger. The feed calls it and
+keeps running when
+
+- a handler raises. The event is reported unhandled.
+- a handler returns anything that is not an ``EventStatus``. The event
+  is reported unhandled.
+- a mark fails, as described above.
+- an event cannot be parsed. ``event`` is then ``None``, and the event
+  is reported unhandled.
+- the API answers the report of an event with a 4** other than a 429,
+  for example a 404 for an event that was deleted in the meantime.
+
+If ``on_error`` itself raises, the feed logs that error with the
+``discoin.feed`` logger and keeps running.
+
+.. code:: py
+
+    class MyClient(Client):
+        async def on_error(self, error, event):
+            print(event, repr(error))
 
 **When the feed stops**
 
-- A handler that raises stops the feed, and so does an event that
-  cannot be parsed. The events handled before it are acknowledged, the
-  error is logged with the ``discoin`` logger and kept in
+- A 4** other than a 429 on the claim stops the feed. The error is
+  logged with the ``discoin.feed`` logger and kept in
   ``client.events_error``, and ``client.events_running`` turns
-  ``False``. After the next ``start()`` the API sends the event again.
-- A 4** other than a 429 stops the feed the same way, and so does a
-  request that still fails after ``max_retries`` retries.
+  ``False``.
+- A claim or a report that still fails after ``max_retries`` retries, 8
+  by default, stops the feed the same way.
+- A claim answered with a body that has no ``events``, or with an
+  event that has no ``id``, stops the feed the same way, since such an
+  event cannot be reported.
+- An event that has an ``id`` and cannot be parsed otherwise, for
+  example for an ``attempt`` that is not an ``int`` or a ``test`` that
+  is not a ``bool``, does not stop the feed. ``on_error`` gets the
+  error with ``None`` as the event, and the event is reported
+  unhandled.
+- ``close()`` called from inside a handler or ``on_error`` cancels
+  nothing. The session is closed, the handler or ``on_error`` runs on
+  to its end, and the feed then stops without another request. The
+  event it was on is neither marked nor reported, so the API sends it
+  again once its lease and wait are over. Nothing is logged or put in
+  ``client.events_error``.
+- After the next ``start()`` the API sends the events that were not
+  reported again, once their lease and wait are over.
 
 **Webhooks**
 
@@ -176,18 +279,20 @@ handlers on it is allowed, and nothing is called.
   its events go to the webhook, and the API answers a 409 on the feed.
   Each event goes to the webhook or to the feed, never to both.
 - Saving a webhook URL deletes the events stored in the feed.
-- On a 409 the feed logs one warning and stops. It does not raise and
-  does not retry, which is a choice of the library. The 409 is kept in
-  ``client.events_error``, and ``start()`` starts the feed again once
-  the URL is removed.
+- On a 409 for the claim the feed logs one warning and stops. It does
+  not raise and does not retry, which is a choice of the library. The
+  409 is kept in ``client.events_error``, and ``start()`` starts the
+  feed again once the URL is removed.
 
 **Events are kept for 24 hours**
 
-- The API deletes an event 24 hours after it was written, read or not.
-  A bot that was offline for longer gets no notice of it.
+- The API deletes an event 24 hours after it was written, whatever
+  became of it: handled, waiting for its next try or dead. A bot that
+  was offline for longer gets no notice of it.
+- A report for a deleted event is answered with a 404.
 - Deleted events leave a gap that the API skips without an error and
-  without a marker, so the IDs of a read are ascending but not always
-  consecutive. A bot whose events all expired reads an empty list.
+  without a marker, so the IDs of a claim are ascending but not always
+  consecutive. A bot whose events all expired claims an empty list.
 - *discoin.py* does not detect gaps and logs nothing about skipped IDs.
 - ``fetch_pending_transactions`` only lists ``Pending`` transactions,
   so a cancellation or reversal that was missed as an event is not in
@@ -197,13 +302,20 @@ handlers on it is allowed, and nothing is called.
 
 **Without the background feed**
 
-``fetch_events`` and ``acknowledge_events`` map the two routes of the
-feed, for a bot that reads it in its own loop. They do not need
-``start()``, and they raise on every error, a 409 included. ``after``
-of ``fetch_events`` does not move the acknowledged position.
+``claim_events`` and ``report_event`` map the two routes of the feed,
+for a bot that reads it in its own loop. They do not need ``start()``,
+and they raise on every error, a 409 included. ``claim_events`` calls
+no handler and marks nothing, and each event it returns is leased
+until ``report_event`` is called for it or the lease runs out.
+
+.. code:: py
+
+    events = await client.claim_events(limit=10)
+
+    await client.report_event(events[0].id, True)
 
 The API outlines a pushed stream of the same events for later. It
-would use the same event IDs and the same acknowledged position.
+would use the same event IDs.
 
 An example cog that uses the feed can be found `here <https://git.gami.app/Discoin/discoin.py/src/branch/master/examples/example_events_cog.py>`__.
 
@@ -242,10 +354,9 @@ Reversed  listed                         listed
 - A bot that runs both currencies of a transaction gets it once, and
   one ``mark_handled`` clears it.
 - A transaction stays listed until your bot marks it handled. There is
-  no time window and no cursor. An event that was delivered or
-  acknowledged does not clear it, so a cancelled or reversed
-  transaction can reach a receiving bot twice, once as an event and
-  once in this list.
+  no time window and no cursor. An event that was reported handled
+  does not clear it, so a cancelled or reversed transaction can reach a
+  receiving bot twice, once as an event and once in this list.
 - ``handled_at`` of an undone transaction is when it was undone. The
   list is ordered by it, oldest first.
 - ``limit`` is from 1 to 100, and the API's default is 50. Any other

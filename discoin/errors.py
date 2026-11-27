@@ -36,7 +36,7 @@ class BadRequest(DiscoinError):
 
 class RateLimited(BadRequest):
     """
-    This error is raised when the API returns a status code of 429. The API allows 300 requests a minute per token
+    This error is raised when the API returns a status code of 429. The API allows 1200 requests a minute per IP address, shared by every bot on that address, and answers a 429 with a `Retry-After` header above that
 
     :param status: (``int``) The status code from the API's error body, or the HTTP status if the response carried no Discoin error body
     :param message: (``str``) The message from the API's error body. ``None`` if the response carried no Discoin error body

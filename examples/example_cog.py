@@ -7,19 +7,25 @@ from discoin import BadRequest, Client, InternalServerError, WebTimeoutError
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.discoin_client = Client(token="XXXXXXXXXXXXXXX", me="{YOUR CURRENCY CODE}") # Initializes Discoin
-        self.discoin_update.add_exception_type(InternalServerError, WebTimeoutError) # The task retries these with a growing wait instead of stopping
+        # Initializes Discoin
+        self.discoin_client = Client(token="XXXXXXXXXXXXXXX", me="{YOUR CURRENCY CODE}")
+        # The task retries these with a growing wait instead of stopping
+        self.discoin_update.add_exception_type(InternalServerError, WebTimeoutError)
 
     async def cog_load(self):
-        self.discoin_update.start() # Starts the background task
+        # Starts the background task
+        self.discoin_update.start()
 
     async def cog_unload(self):
         self.discoin_update.cancel()
-        await self.discoin_client.close() # Closes the session
+        # Closes the session
+        await self.discoin_client.close()
 
-    @tasks.loop(minutes=5.0) # A background task that runs every 5 minutes
+    # A background task that runs every 5 minutes
+    @tasks.loop(minutes=5.0)
     async def discoin_update(self):
-        pending_transactions = await self.discoin_client.fetch_pending_transactions() # Grabs a list of pending transactions from the API
+        # Grabs a list of pending transactions from the API
+        pending_transactions = await self.discoin_client.fetch_pending_transactions()
         for transaction in pending_transactions:
             await self.complete_transaction(transaction)
 
@@ -42,24 +48,35 @@ class Economy(commands.Cog):
         # WARNING! At this point, you will have to add `transaction.payout` into the user's balance.
 
         try:
-            await self.discoin_client.mark_completed(transaction.id) # Marking the transaction as completed
+            # Marking the transaction as completed
+            await self.discoin_client.mark_completed(transaction.id)
         except BadRequest as error:
-            if error.status != 400: raise # Any other error raises, which stops the task
+            if error.status != 400:
+                # Any other error raises, which stops the task
+                raise
 
-            return # A 400 means the transaction is no longer `Pending`, for example because it was cancelled after the list was fetched
+            # A 400 means the transaction is no longer `Pending`, for example because it was cancelled after the list was fetched
+            return
 
         try:
-            user = await self.bot.fetch_user(transaction.user_id) # `get_user` reads the cache, which is empty until the bot is ready, and the task starts in `cog_load`, before that
-            await user.send(f"Your transfer from {transaction.currency_from.name} (`{transaction.currency_from.abbreviation}`) has just been processed! \n`${transaction.payout}` has been added to your account. \nHere is your receipt: `{transaction.id}`") # Notify the user that their transaction went through
+            # `get_user` reads the cache, which is empty until the bot is ready, and the task starts in `cog_load`, before that
+            user = await self.bot.fetch_user(transaction.user_id)
+            # Notify the user that their transaction went through
+            await user.send(f"Your transfer from {transaction.currency_from.name} (`{transaction.currency_from.abbreviation}`) has just been processed! \n`${transaction.payout}` has been added to your account. \nHere is your receipt: `{transaction.id}`")
         except discord.HTTPException as error:
-            print(f"Could not notify user {transaction.user_id} of transaction {transaction.id}: {error}") # A user with closed DMs makes `send` raise, which would stop the task
+            # A user with closed DMs makes `send` raise, which would stop the task
+            print(f"Could not notify user {transaction.user_id} of transaction {transaction.id}: {error}")
 
     @commands.group(invoke_without_command=True)
     async def transfer(self, ctx, amount: float, to: str):
         """Transfer currency to another bot that supports discoin"""
         # At this point, make sure the user has enough balance
-        transaction = await self.discoin_client.create_transaction(to, amount, ctx.author.id) # Make the transaction. The currency code can be in any case
-        # Remove {amount} from the user's balance
+
+        # Make the transaction. The currency code can be in any case
+        transaction = await self.discoin_client.create_transaction(to, amount, ctx.author.id)
+
+        # At this point, remove {amount} from the user's balance
+
         await ctx.send(f"Your transfer to {transaction.currency_to.name} (`{transaction.currency_to.abbreviation}`) is on its way! \nYou will be getting `{transaction.payout} {transaction.currency_to.abbreviation}` \nHere is your receipt: `{transaction.id}`")
 
     @transfer.command()

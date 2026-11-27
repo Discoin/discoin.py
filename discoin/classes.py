@@ -107,7 +107,7 @@ class EventType():
     The event names the API sends today.
     `TransactionEvent.event` is always a plain string, so a name that is not listed here passes through unchanged
 
-    ``CREATED`` is ``"transaction.created"``, ``CANCELLED`` is ``"transaction.cancelled"``, ``REVERSED`` is ``"transaction.reversed"`` and ``TEST`` is ``"transaction.test"``
+    ``CREATED`` is ``"transaction.created"``, ``CANCELLED`` is ``"transaction.cancelled"`` and ``REVERSED`` is ``"transaction.reversed"``
 
     The event feed calls the method of a `Client` subclass named after the event, e.g. `on_transaction_created` for ``CREATED``. See `Client.start`
     """
@@ -115,7 +115,27 @@ class EventType():
     CREATED = "transaction.created"
     CANCELLED = "transaction.cancelled"
     REVERSED = "transaction.reversed"
-    TEST = "transaction.test"
+
+
+class EventStatus(Enum):
+    """
+    What a handler of the event feed returns for an event. See `Client.start`
+
+    ``COMPLETED``: the feed marks the transaction of the event `Completed`, then reports the event handled
+
+    ``REFUNDED``: the feed marks the transaction of the event `Refunded`, then reports the event handled
+
+    The feed sends the mark itself, under the retry rules `Client.start` describes, and does not call `Client.mark_completed` or `Client.mark_refunded`
+
+    ``HANDLED``: the feed reports the event handled and marks nothing
+
+    ``UNHANDLED``: the feed reports the event unhandled, and the API sends it again after a wait
+    """
+
+    COMPLETED = "completed"
+    REFUNDED = "refunded"
+    HANDLED = "handled"
+    UNHANDLED = "unhandled"
 
 
 class TriggerKind():
@@ -152,6 +172,8 @@ class TransactionEvent():
 
     :param id: (``int``) The ID of the event. IDs count up per bot, start at 1 and are never used twice
     :param event: (``str``) The name of the event. See `discoin.EventType`
+    :param attempt: (``int``) How many times the API has handed the event out, this time included. 1 on the first claim. Above 1, an earlier try may already have run the handler and marked the transaction
+    :param test: (``bool``) If the event was sent by the Test button of the bot owner page
     :param transaction: (``discoin.FeedTransaction``) The transaction as it was when the event was written
     :param triggered_by: (``discoin.EventTrigger``) Who caused the event. ``None`` if the API sent none
     """
@@ -159,6 +181,8 @@ class TransactionEvent():
     def __init__(self, event_obj):
         self.id = _require_type(event_obj['id'], int)
         self.event = _require_type(event_obj['event'], str)
+        self.attempt = _require_type(event_obj['attempt'], int)
+        self.test = _require_type(event_obj['test'], bool)
         self.transaction = FeedTransaction(event_obj['transaction'])
 
         trigger_obj = event_obj.get('triggeredBy')
@@ -169,7 +193,8 @@ class TransactionEvent():
 
 
 def _require_type(value, expected_type):
-    if not isinstance(value, expected_type):
+    # isinstance would accept a bool where the API documents an int, since bool is a subclass of int
+    if type(value) is not expected_type:
         raise TypeError(f"{value!r} is not of the type {expected_type.__name__} the Discoin API sends")
 
     return value

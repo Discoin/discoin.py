@@ -20,8 +20,9 @@ Client
    discoin.Client.fetch_undone_transactions
    discoin.Client.mark_handled
    discoin.Client.start
-   discoin.Client.fetch_events
-   discoin.Client.acknowledge_events
+   discoin.Client.on_error
+   discoin.Client.claim_events
+   discoin.Client.report_event
    discoin.Client.close
 
 |
@@ -40,6 +41,7 @@ Classes
    discoin.FeedTransaction
    discoin.EventTrigger
    discoin.EventType
+   discoin.EventStatus
    discoin.TriggerKind
 
 |
